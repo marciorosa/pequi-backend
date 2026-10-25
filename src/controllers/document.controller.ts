@@ -1,0 +1,102 @@
+import { Request, Response } from 'express';
+import { AuthRequest } from '../types';
+import { createNotification } from './notification.controller';
+
+// Get document history
+export const getDocumentHistory = async (req: AuthRequest, res: Response) => {
+  try {
+    // For now, just return an empty array
+    // In a production app, you would fetch this from a database
+    res.json({
+      success: true,
+      data: []
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Error fetching document history', 
+      error: (error as Error).message 
+    });
+  }
+};
+
+// Create a new document
+export const createDocument = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { title, content, documentType } = req.body;
+    
+    if (!title || !content || !documentType) {
+      return res.status(400).json({ message: 'Title, content, and document type are required' });
+    }
+    
+    // Here, you would typically save the document to your database
+    // For now, we'll just simulate a successful creation
+    const documentId = `doc_${Date.now()}`;
+    
+    // Create notification for the document creation
+    await createNotification(
+      req.user.id,
+      'document',
+      'Document Created',
+      `Your document "${title}" has been successfully created.`,
+      documentId
+    );
+    
+    res.status(201).json({
+      success: true,
+      document: {
+        id: documentId,
+        title,
+        documentType,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Error creating document', 
+      error: (error as Error).message 
+    });
+  }
+};
+
+// Update a document
+export const updateDocument = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    
+    const documentId = req.params.id;
+    const { title, content } = req.body;
+    
+    if (!title && !content) {
+      return res.status(400).json({ message: 'At least one field to update is required' });
+    }
+    
+    // Here, you would update the document in your database
+    // For now, we'll just simulate a successful update
+    
+    // Create notification for the document update
+    await createNotification(
+      req.user.id,
+      'document',
+      'Document Updated',
+      `Your document "${title || 'Untitled'}" has been successfully updated.`,
+      documentId
+    );
+    
+    res.json({
+      success: true,
+      message: 'Document updated successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Error updating document', 
+      error: (error as Error).message 
+    });
+  }
+}; 
