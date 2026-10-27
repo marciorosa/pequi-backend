@@ -126,6 +126,10 @@ app.get('/health', (req: Request, res: Response) => {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1
     },
+    // Only reports whether each variable is set (true/false), never its value
+    config: ['MONGO_URI', 'JWT_SECRET', 'GEMINI_API_KEY', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'EMAIL_USER', 'AWS_S3_BUCKET_NAME']
+      .reduce((acc, key) => { acc[key] = Boolean(process.env[key]); return acc; }, {} as Record<string, boolean>),
+    node: process.version,
     timestamp: new Date().toISOString()
   });
 });
@@ -164,6 +168,9 @@ for (const [path, router] of routes) {
  * Global Error Handling Middleware
  */
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  // Log every error so the real cause shows up in the hosting logs
+  console.error(`[error] ${req.method} ${req.originalUrl}:`, err?.stack || err);
+
   let statusCode = 500;
   let message = 'Algo deu errado!';
   let details = undefined;
