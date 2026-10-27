@@ -98,18 +98,38 @@ app.options('*', cors(corsOptions));
 
 // Connect to MongoDB with optimized settings
 const MONGO_URI = process.env.MONGO_URI as string;
-mongoose.connect(MONGO_URI, {
-  serverSelectionTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  retryWrites: true,
-  retryReads: true,
-}).then(() => {
-  console.log('[startup] MongoDB conectado');
-}).catch((err) => {
-  console.error('[startup] Falha ao conectar no MongoDB (verifique MONGO_URI):', err?.message || err);
-});
+let lastDbError: string | null = null;
+
+/**
+ * Connects to MongoDB and keeps retrying every 15s if the first attempt fails
+ * (mongoose does not retry a failed initial connection on its own).
+ */
+const connectToMongo = (): void => {
+  if (!MONGO_URI) {
+    lastDbError = 'MONGO_URI não definida';
+    console.error('[startup] MONGO_URI não definida: configure a variável de ambiente no painel da hospedagem.');
+    return;
+  }
+
+  mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    retryWrites: true,
+    retryReads: true,
+  }).then(() => {
+    lastDbError = null;
+    console.log('[startup] MongoDB conectado');
+  }).catch((err) => {
+    // Never expose credentials that could appear inside a connection string
+    lastDbError = String(err?.message || err).replace(/mongodb(\+srv)?:\/\/[^@\s]*@/g, 'mongodb://***@');
+    console.error('[startup] Falha ao conectar no MongoDB (nova tentativa em 15s):', lastDbError);
+    setTimeout(connectToMongo, 15000);
+  });
+};
+
+connectToMongo();
 
 // Routes
 app.get('/', (req: Request, res: Response) => {
@@ -124,7 +144,8 @@ app.get('/health', (req: Request, res: Response) => {
     status: 'healthy',
     database: {
       status: dbStates[dbStatus] || 'unknown',
-      connected: dbStatus === 1
+      connected: dbStatus === 1,
+      lastError: dbStatus === 1 ? null : lastDbError
     },
     // Only reports whether each variable is set (true/false), never its value
     config: ['MONGO_URI', 'JWT_SECRET', 'GEMINI_API_KEY', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'EMAIL_USER', 'AWS_S3_BUCKET_NAME']
