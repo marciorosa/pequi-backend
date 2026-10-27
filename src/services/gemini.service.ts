@@ -44,16 +44,19 @@ const safetySettings = [
 ];
 
 // Modelo Gemini (configurável via GEMINI_MODEL).
-// O gemini-2.0-flash foi desligado pelo Google em 01/06/2026; o padrão agora é o gemini-2.5-flash.
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+// O gemini-2.0-flash foi desligado em 01/06/2026 e o gemini-2.5-flash não está mais
+// disponível para chaves novas; o Google indica o gemini-3.8-flash.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
-// O gemini-2.5-flash "pensa" antes de responder e esses tokens contam no limite
-// maxOutputTokens, o que pode deixar a resposta vazia. Desligamos o modo de
-// raciocínio (mesmo comportamento do 2.0-flash). Tipado como any porque a versão
-// do SDK ainda não declara thinkingConfig, mas a API aceita o campo.
+// Os modelos Gemini 2.5+ "pensam" antes de responder e esses tokens contam no
+// limite maxOutputTokens. Reduzimos o raciocínio ao mínimo para respostas rápidas
+// e baratas. Tipado como any porque esta versão do SDK ainda não declara
+// thinkingConfig, mas a API aceita o campo.
 const NO_THINKING: any = /^gemini-2\.5-flash/.test(GEMINI_MODEL)
   ? { thinkingConfig: { thinkingBudget: 0 } }
-  : {};
+  : /^gemini-3/.test(GEMINI_MODEL)
+    ? { thinkingConfig: { thinkingLevel: 'low' } }
+    : {};
 
 const model = genAI.getGenerativeModel({
   model: GEMINI_MODEL,
@@ -76,7 +79,7 @@ export const generateLegalResponse = async (prompt: string, context?: any): Prom
         temperature: 0.7,
         topP: 0.95,
         topK: 64,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
       },
     });
 
@@ -173,7 +176,7 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
       temperature: 0.2, // Lower temperature for more consistent formatting
       topP: 0.8,
       topK: 40,
-      maxOutputTokens: 1000, // Shorter to encourage conciseness
+      maxOutputTokens: 2048, // Shorter to encourage conciseness
     };
 
     const result = await model.generateContent({
@@ -233,7 +236,7 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
       temperature: 0.7, // Higher temperature for more creative follow-ups
       topP: 0.95,
       topK: 40,
-      maxOutputTokens: 256, // Short responses only needed
+      maxOutputTokens: 1024, // Short responses only needed
     };
 
     const result = await model.generateContent({
@@ -579,7 +582,7 @@ export const generateChatResponse = async (
           temperature: 0.7,
           topP: 0.95,
           topK: 64,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 8192,
         },
       });
     } catch (chatError) {
@@ -590,7 +593,7 @@ export const generateChatResponse = async (
           temperature: 0.7,
           topP: 0.95,
           topK: 64,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 8192,
         },
       });
     }
@@ -780,7 +783,7 @@ export const analyzeDocument = async (
         temperature: 0.2,
         topP: 0.8,
         topK: 40,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
       },
     });
 
@@ -847,7 +850,7 @@ export const compareDocuments = async (
         temperature: 0.2,
         topP: 0.8,
         topK: 40,
-        maxOutputTokens: 4096, // More tokens for detailed comparison
+        maxOutputTokens: 8192, // More tokens for detailed comparison
       },
     });
 
@@ -946,7 +949,7 @@ export const checkGemini = async (): Promise<{ ok: boolean; model: string; keyCo
     const probe = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await probe.generateContent({
       contents: [{ role: 'user', parts: [{ text: 'Responda apenas: ok' }] }],
-      generationConfig: { ...NO_THINKING, maxOutputTokens: 10 },
+      generationConfig: { ...NO_THINKING, maxOutputTokens: 512 },
     });
     return { ok: true, model: GEMINI_MODEL, keyConfigured, reply: result.response.text().trim() };
   } catch (err: any) {
