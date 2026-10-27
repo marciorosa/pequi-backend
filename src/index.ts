@@ -155,6 +155,13 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// Diagnóstico da IA: testa a chave e o modelo do Gemini com uma chamada mínima
+app.get('/health/ai', async (req: Request, res: Response) => {
+  const { checkGemini } = await import('./services/gemini.service');
+  const result = await checkGemini();
+  res.status(result.ok ? 200 : 503).json({ ...result, timestamp: new Date().toISOString() });
+});
+
 // Import routes
 import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';

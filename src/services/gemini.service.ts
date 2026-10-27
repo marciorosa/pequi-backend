@@ -47,6 +47,14 @@ const safetySettings = [
 // O gemini-2.0-flash foi desligado pelo Google em 01/06/2026; o padrão agora é o gemini-2.5-flash.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
+// O gemini-2.5-flash "pensa" antes de responder e esses tokens contam no limite
+// maxOutputTokens, o que pode deixar a resposta vazia. Desligamos o modo de
+// raciocínio (mesmo comportamento do 2.0-flash). Tipado como any porque a versão
+// do SDK ainda não declara thinkingConfig, mas a API aceita o campo.
+const NO_THINKING: any = /^gemini-2\.5-flash/.test(GEMINI_MODEL)
+  ? { thinkingConfig: { thinkingBudget: 0 } }
+  : {};
+
 const model = genAI.getGenerativeModel({
   model: GEMINI_MODEL,
   safetySettings,
@@ -64,6 +72,7 @@ export const generateLegalResponse = async (prompt: string, context?: any): Prom
     const chat = model.startChat({
       history: [],
       generationConfig: {
+        ...NO_THINKING,
         temperature: 0.7,
         topP: 0.95,
         topK: 64,
@@ -160,6 +169,7 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
 
     // Set generation config for consistent responses
     const generationConfig = {
+      ...NO_THINKING,
       temperature: 0.2, // Lower temperature for more consistent formatting
       topP: 0.8,
       topK: 40,
@@ -219,6 +229,7 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
     `;
 
     const generationConfig = {
+      ...NO_THINKING,
       temperature: 0.7, // Higher temperature for more creative follow-ups
       topP: 0.95,
       topK: 40,
@@ -564,6 +575,7 @@ export const generateChatResponse = async (
       chat = model.startChat({
         history: history.length > 0 ? history : undefined,
         generationConfig: {
+          ...NO_THINKING,
           temperature: 0.7,
           topP: 0.95,
           topK: 64,
@@ -574,6 +586,7 @@ export const generateChatResponse = async (
       // Fallback to starting chat without history
       chat = model.startChat({
         generationConfig: {
+          ...NO_THINKING,
           temperature: 0.7,
           topP: 0.95,
           topK: 64,
@@ -763,6 +776,7 @@ export const analyzeDocument = async (
     const resultPromise = multimodalModel.generateContent({
       contents: [{ role: "user", parts: messageParts }],
       generationConfig: {
+        ...NO_THINKING,
         temperature: 0.2,
         topP: 0.8,
         topK: 40,
@@ -829,6 +843,7 @@ export const compareDocuments = async (
     const result = await multimodalModel.generateContent({
       contents: [{ role: "user", parts: messageParts }],
       generationConfig: {
+        ...NO_THINKING,
         temperature: 0.2,
         topP: 0.8,
         topK: 40,
@@ -916,4 +931,31 @@ export default {
   compareDocuments,
   generateContentWithFile,
   formatResponseToHTML,
+};
+
+/**
+ * Diagnóstico: faz uma chamada mínima ao Gemini e informa se a chave/modelo funcionam.
+ * Nunca expõe a chave; devolve só o status e a mensagem de erro da API.
+ */
+export const checkGemini = async (): Promise<{ ok: boolean; model: string; keyConfigured: boolean; reply?: string; error?: string; status?: number }> => {
+  const keyConfigured = Boolean(apiKey);
+  if (!keyConfigured) {
+    return { ok: false, model: GEMINI_MODEL, keyConfigured, error: 'GEMINI_API_KEY não definida' };
+  }
+  try {
+    const probe = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const result = await probe.generateContent({
+      contents: [{ role: 'user', parts: [{ text: 'Responda apenas: ok' }] }],
+      generationConfig: { ...NO_THINKING, maxOutputTokens: 10 },
+    });
+    return { ok: true, model: GEMINI_MODEL, keyConfigured, reply: result.response.text().trim() };
+  } catch (err: any) {
+    return {
+      ok: false,
+      model: GEMINI_MODEL,
+      keyConfigured,
+      status: err?.status,
+      error: String(err?.message || err).replace(apiKey || '__no_key__', '***'),
+    };
+  }
 };
