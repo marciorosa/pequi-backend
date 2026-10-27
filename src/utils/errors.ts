@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Base error class for AIForLawyers application
+ * Base error class for Pequi application
  */
 export class AppError extends Error {
     public readonly statusCode: number;
@@ -22,7 +22,7 @@ export class AppError extends Error {
  * Error for authentication and authorization issues
  */
 export class AuthError extends AppError {
-    constructor(message: string = 'Authentication failed') {
+    constructor(message: string = 'Falha na autenticação') {
         super(message, 401);
     }
 }
@@ -33,7 +33,7 @@ export class AuthError extends AppError {
 export class ValidationError extends AppError {
     public readonly errors?: any[];
 
-    constructor(message: string = 'Validation failed', errors?: any[]) {
+    constructor(message: string = 'Falha na validação', errors?: any[]) {
         super(message, 400);
         this.errors = errors;
     }
@@ -43,8 +43,8 @@ export class ValidationError extends AppError {
  * Error for not found resources
  */
 export class NotFoundError extends AppError {
-    constructor(resource: string = 'Resource') {
-        super(`${resource} not found`, 404);
+    constructor(resource: string = 'Recurso') {
+        super(`${resource} não encontrado`, 404);
     }
 }
 
@@ -56,7 +56,7 @@ export class ExternalServiceError extends AppError {
     public readonly originalError?: any;
 
     constructor(serviceName: string, message: string, originalError?: any) {
-        super(`${serviceName} Error: ${message}`, 502);
+        super(`Erro no serviço ${serviceName}: ${message}`, 502);
         this.serviceName = serviceName;
         this.originalError = originalError;
     }
@@ -67,6 +67,6 @@ export class ExternalServiceError extends AppError {
  */
 export class DatabaseError extends AppError {
     constructor(message: string, isOperational: boolean = false) {
-        super(`Database Error: ${message}`, 500, isOperational);
+        super(`Erro no banco de dados: ${message}`, 500, isOperational);
     }
 }

@@ -8,7 +8,7 @@ import { createNotification } from './notification.controller';
 export const getUserChats = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     // Fetch only essential data for the chat list (no messages)
@@ -23,7 +23,7 @@ export const getUserChats = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error retrieving chat history', 
+      message: 'Erro ao carregar o histórico de conversas', 
       error: (error as Error).message 
     });
   }
@@ -33,14 +33,14 @@ export const getUserChats = async (req: AuthRequest, res: Response) => {
 export const getChatById = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const chatId = req.params.id;
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      return res.status(400).json({ message: 'Invalid chat ID' });
+      return res.status(400).json({ message: 'ID de conversa inválido' });
     }
 
     const chat = await Chat.findOne({ 
@@ -49,7 +49,7 @@ export const getChatById = async (req: AuthRequest, res: Response) => {
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Chat not found' });
+      return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
     res.json({
@@ -59,7 +59,7 @@ export const getChatById = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error retrieving chat', 
+      message: 'Erro ao carregar a conversa', 
       error: (error as Error).message 
     });
   }
@@ -69,7 +69,7 @@ export const getChatById = async (req: AuthRequest, res: Response) => {
 export const createChat = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const { title, messages } = req.body;
@@ -77,7 +77,7 @@ export const createChat = async (req: AuthRequest, res: Response) => {
     // Create a new chat
     const chat = new Chat({
       userId: req.user.id,
-      title: title || 'New Chat',
+      title: title || 'Nova conversa',
       messages: messages || []
     });
 
@@ -87,8 +87,8 @@ export const createChat = async (req: AuthRequest, res: Response) => {
     await createNotification(
       req.user.id,
       'account',
-      'New Chat Started',
-      `Your chat "${chat.title}" has been created.`,
+      'Nova conversa iniciada',
+      `Sua conversa "${chat.title}" foi criada.`,
       chat._id instanceof mongoose.Types.ObjectId ? chat._id.toString() : String(chat._id)
     );
 
@@ -99,7 +99,7 @@ export const createChat = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error creating chat', 
+      message: 'Erro ao criar a conversa', 
       error: (error as Error).message 
     });
   }
@@ -109,7 +109,7 @@ export const createChat = async (req: AuthRequest, res: Response) => {
 export const updateChat = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const chatId = req.params.id;
@@ -117,7 +117,7 @@ export const updateChat = async (req: AuthRequest, res: Response) => {
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      return res.status(400).json({ message: 'Invalid chat ID' });
+      return res.status(400).json({ message: 'ID de conversa inválido' });
     }
 
     // Find the chat
@@ -127,7 +127,7 @@ export const updateChat = async (req: AuthRequest, res: Response) => {
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Chat not found' });
+      return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
     // Check if new messages were added
@@ -156,8 +156,8 @@ export const updateChat = async (req: AuthRequest, res: Response) => {
         await createNotification(
           req.user.id,
           'alert',
-          'New AI Response',
-          `You received a new response in your chat "${chat.title}".`,
+          'Nova resposta da IA',
+          `Você recebeu uma nova resposta na conversa "${chat.title}".`,
           chat._id instanceof mongoose.Types.ObjectId ? chat._id.toString() : String(chat._id)
         );
       }
@@ -170,7 +170,7 @@ export const updateChat = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error updating chat', 
+      message: 'Erro ao atualizar a conversa', 
       error: (error as Error).message 
     });
   }
@@ -180,14 +180,14 @@ export const updateChat = async (req: AuthRequest, res: Response) => {
 export const deleteChat = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const chatId = req.params.id;
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      return res.status(400).json({ message: 'Invalid chat ID' });
+      return res.status(400).json({ message: 'ID de conversa inválido' });
     }
 
     const result = await Chat.deleteOne({ 
@@ -196,17 +196,17 @@ export const deleteChat = async (req: AuthRequest, res: Response) => {
     });
 
     if (result.deletedCount === 0) {
-      return res.status(404).json({ message: 'Chat not found or already deleted' });
+      return res.status(404).json({ message: 'Conversa não encontrada ou já excluída' });
     }
 
     res.json({
       success: true,
-      message: 'Chat deleted successfully'
+      message: 'Conversa excluída com sucesso'
     });
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error deleting chat', 
+      message: 'Erro ao excluir a conversa', 
       error: (error as Error).message 
     });
   }

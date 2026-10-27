@@ -16,7 +16,7 @@ export class WorkflowExecutionService {
      */
     static async execute(workflowId: string, options: { testFile?: any } = {}) {
         const workflow = await Workflow.findById(workflowId);
-        if (!workflow) throw new Error('Workflow not found');
+        if (!workflow) throw new Error('Fluxo de trabalho não encontrado');
 
         const nodes = workflow.nodes;
         const edges = workflow.edges;
@@ -50,7 +50,7 @@ export class WorkflowExecutionService {
                         results.set(id, {
                             fileName,
                             fileBuffer,
-                            content: fileBuffer ? `[Document Loaded: ${fileName}]` : 'Error: No file content provided'
+                            content: fileBuffer ? `[Documento carregado: ${fileName}]` : 'Erro: nenhum conteúdo de arquivo foi enviado'
                         });
                         break;
 
@@ -106,19 +106,19 @@ export class WorkflowExecutionService {
                             const userId = (workflow as any).userId;
 
                             try {
-                                // Find or create an 'Automations' folder
-                                let folder = await VaultFolder.findOne({ userId, name: 'Automations' });
+                                // Find or create an 'Automações' folder (also matches the legacy English name)
+                                let folder = await VaultFolder.findOne({ userId, name: { $in: ['Automações', 'Automations'] } });
                                 if (!folder) {
                                     folder = await VaultFolder.create({
                                         userId,
-                                        name: 'Automations',
-                                        description: 'Automatically generated reports and drafts',
+                                        name: 'Automações',
+                                        description: 'Relatórios e minutas gerados automaticamente',
                                         color: '#1a1a1a',
                                         files: []
                                     });
                                 }
 
-                                const fileName = `Analysis_${workflow.name}_${Date.now()}.html`;
+                                const fileName = `Analise_${workflow.name}_${Date.now()}.html`;
                                 const buffer = Buffer.from(contentToSave.content);
 
                                 const { s3Key, s3Url } = await s3Service.uploadFile(
@@ -141,9 +141,9 @@ export class WorkflowExecutionService {
                                 } as any);
 
                                 await folder.save();
-                                results.set(id, { status: 'saved', folder: 'Automations', fileName });
+                                results.set(id, { status: 'saved', folder: folder.name, fileName });
                             } catch (vaultErr) {
-                                results.set(id, { error: 'Vault save failed' });
+                                results.set(id, { error: 'Falha ao salvar no Cofre' });
                             }
                         }
                         break;
@@ -152,14 +152,14 @@ export class WorkflowExecutionService {
                         const finalOutput = this.getPreviousOutput(id, edges, results);
                         const recipient = config.recipient;
                         if (recipient) {
-                            const subject = config.subject || 'AIForLawyers';
+                            const subject = config.subject || 'Pequi';
 
                             // Check if digital signature is requested
                             if (config.useDocuSign && finalOutput?.fileBuffer) {
                                 try {
                                     await DocuSignService.sendEnvelope({
                                         fileBuffer: finalOutput.fileBuffer,
-                                        fileName: finalOutput.fileName || 'DocForSignature.pdf',
+                                        fileName: finalOutput.fileName || 'DocumentoParaAssinatura.pdf',
                                         emailSubject: subject,
                                         recipientEmail: recipient,
                                         recipientName: recipient.split('@')[0], // Fallback name
@@ -167,13 +167,13 @@ export class WorkflowExecutionService {
                                     });
                                     results.set(id, { status: 'docusign_sent', recipient });
                                 } catch (dsErr) {
-                                    results.set(id, { error: 'DocuSign request failed' });
+                                    results.set(id, { error: 'Falha na solicitação ao DocuSign' });
                                 }
                             } else {
                                 // Default simple email
                                 const emailContent = `
                                     <div style="font-family: inherit; color: #333;">
-                                        ${finalOutput?.content || '<p style="color: red;">Warning: No analysis data was generated for this workflow step.</p>'}
+                                        ${finalOutput?.content || '<p style="color: red;">Atenção: nenhum dado de análise foi gerado nesta etapa do fluxo de trabalho.</p>'}
                                     </div>
                                 `;
                                 await sendWorkflowEmail(recipient, subject, emailContent);
@@ -186,7 +186,7 @@ export class WorkflowExecutionService {
                         results.set(id, { status: 'skipped' });
                 }
             } catch (err) {
-                results.set(id, { error: 'Execution failed', details: (err as Error).message });
+                results.set(id, { error: 'Falha na execução', details: (err as Error).message });
             }
 
             // Find next node

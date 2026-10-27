@@ -46,7 +46,7 @@ export const s3Service = {
 
             return { s3Key, s3Url };
         } catch (error) {
-            throw new ExternalServiceError('AWS S3', 'Failed to upload file', error);
+            throw new ExternalServiceError('AWS S3', 'Falha ao enviar o arquivo', error);
         }
     },
     
@@ -78,7 +78,7 @@ export const s3Service = {
 
         return { s3Key, s3Url };
       } catch (error) {
-        throw new ExternalServiceError('AWS S3', 'Failed to upload profile image', error);
+        throw new ExternalServiceError('AWS S3', 'Falha ao enviar a foto de perfil', error);
       }
     },
 
@@ -95,7 +95,7 @@ export const s3Service = {
             const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: expiresInSeconds });
             return signedUrl;
         } catch (error) {
-            throw new ExternalServiceError('AWS S3', 'Failed to generate signed URL', error);
+            throw new ExternalServiceError('AWS S3', 'Falha ao gerar o link assinado', error);
         }
     },
 
@@ -123,7 +123,7 @@ export const s3Service = {
                 contentType: (response.ContentType as string) || 'application/octet-stream',
             };
         } catch (error) {
-            throw new ExternalServiceError('AWS S3', 'Failed to download file', error);
+            throw new ExternalServiceError('AWS S3', 'Falha ao baixar o arquivo', error);
         }
     },
 
@@ -139,7 +139,7 @@ export const s3Service = {
 
             await s3Client.send(command);
         } catch (error) {
-            throw new ExternalServiceError('AWS S3', 'Failed to delete file', error);
+            throw new ExternalServiceError('AWS S3', 'Falha ao excluir o arquivo', error);
         }
     },
 };

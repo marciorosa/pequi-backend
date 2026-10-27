@@ -15,7 +15,7 @@ router.post('/create-checkout-session', authMiddleware, async (req: AuthRequest,
 
     if (!priceId || !userId || !userEmail) {
       return res.status(400).json({
-        message: 'Missing required fields: priceId, userId, or userEmail'
+        message: 'Campos obrigatórios ausentes: priceId, userId ou userEmail'
       });
     }
 
@@ -66,7 +66,7 @@ router.post('/create-checkout-session', authMiddleware, async (req: AuthRequest,
     res.json(session);
   } catch (error: any) {
     res.status(500).json({
-      message: error.message || 'Error creating checkout session'
+      message: error.message || 'Erro ao criar a sessão de pagamento'
     });
   }
 });
@@ -77,14 +77,14 @@ router.post('/create-portal-session', authMiddleware, async (req: AuthRequest, r
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ message: 'O ID do usuário é obrigatório' });
     }
 
     const session = await stripeService.createPortalSession(userId);
     res.json(session);
   } catch (error: any) {
     res.status(500).json({
-      message: error.message || 'Error creating portal session'
+      message: error.message || 'Erro ao abrir o portal de cobrança'
     });
   }
 });
@@ -95,7 +95,7 @@ router.get('/subscription', authMiddleware, async (req: AuthRequest, res) => {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ message: 'O ID do usuário é obrigatório' });
     }
 
     const subscription = await stripeService.getSubscription(userId);
@@ -115,7 +115,7 @@ router.get('/subscription', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ subscription });
   } catch (error: any) {
     res.status(500).json({
-      message: error.message || 'Error fetching subscription'
+      message: error.message || 'Erro ao carregar a assinatura'
     });
   }
 });
@@ -126,14 +126,14 @@ router.get('/invoices', authMiddleware, async (req: AuthRequest, res) => {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ message: 'O ID do usuário é obrigatório' });
     }
 
     const invoices = await stripeService.getInvoices(userId);
     res.json({ invoices });
   } catch (error: any) {
     res.status(500).json({
-      message: error.message || 'Error fetching invoices'
+      message: error.message || 'Erro ao carregar as faturas'
     });
   }
 });
@@ -144,14 +144,14 @@ router.post('/cancel-subscription', authMiddleware, async (req: AuthRequest, res
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ message: 'O ID do usuário é obrigatório' });
     }
 
     const canceledSubscription = await stripeService.cancelSubscription(userId);
     res.json({ subscription: canceledSubscription });
   } catch (error: any) {
     res.status(500).json({
-      message: error.message || 'Error canceling subscription'
+      message: error.message || 'Erro ao cancelar a assinatura'
     });
   }
 });
@@ -163,7 +163,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     res.json(result);
   } catch (error: any) {
     res.status(400).json({
-      message: error.message || 'Error handling webhook'
+      message: error.message || 'Erro ao processar o webhook'
     });
   }
 });

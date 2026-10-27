@@ -19,6 +19,9 @@ const fileManager = new GoogleAIFileManager(apiKey);
 // Create a system prompt that fine-tunes Gemini for legal assistance
 const legalSystemPrompt = '';
 
+// Response language for Brazilian users
+const PT_BR_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).';
+
 // Configure safety settings
 const safetySettings = [
   {
@@ -75,12 +78,14 @@ export const generateLegalResponse = async (prompt: string, context?: any): Prom
       }
     }
 
+    fullPrompt += `\n\n${PT_BR_INSTRUCTION}`;
+
     // Generate response
     const result = await chat.sendMessage(fullPrompt);
     const response = result.response;
     return response.text();
   } catch (error) {
-    throw new Error('Failed to generate response from AI model');
+    throw new Error('Falha ao gerar a resposta do modelo de IA');
   }
 };
 
@@ -95,6 +100,8 @@ export const analyzeLegalDocument = async (documentContent: string, options?: an
     const documentAnalysisPrompt = `
     ${options?.focus ? `${options.focus}\n\n` : ''}
     ${documentContent}
+
+    ${PT_BR_INSTRUCTION}
     `;
 
     const result = await model.generateContent(documentAnalysisPrompt);
@@ -110,7 +117,7 @@ export const analyzeLegalDocument = async (documentContent: string, options?: an
       // parsing to extract specific sections from the response
     };
   } catch (error) {
-    throw new Error('Failed to analyze document with AI model');
+    throw new Error('Falha ao analisar o documento com o modelo de IA');
   }
 };
 
@@ -143,6 +150,8 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
        - IMPORTANT: Do NOT use any asterisks (*) or markdown formatting in your response
     
     FORMATTING INSTRUCTION: DO NOT use any markdown syntax (no stars/asterisks, no hashes, no underscores) in your response.
+
+    ${PT_BR_INSTRUCTION}
     `;
 
     // Set generation config for consistent responses
@@ -173,7 +182,7 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
       followUpPrompts: followUpPrompts
     };
   } catch (error) {
-    throw new Error('Failed to enhance search with AI model');
+    throw new Error('Falha ao aprimorar a pesquisa com o modelo de IA');
   }
 };
 
@@ -201,6 +210,8 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
     1. How does [topic] apply in California?
     2. What are recent changes to [topic]?
     3. How does [topic] differ internationally?
+
+    ${PT_BR_INSTRUCTION}
     `;
 
     const generationConfig = {
@@ -227,9 +238,9 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
     // Ensure we have exactly 3 follow-ups; if not, return default ones
     if (followUps.length !== 3) {
       return [
-        `How does this apply in different jurisdictions?`,
-        `What are recent landmark cases for this topic?`,
-        `What practical considerations should be noted?`
+        `Como isso se aplica em diferentes jurisdições?`,
+        `Quais são os casos paradigmáticos recentes sobre o tema?`,
+        `Quais cuidados práticos devem ser observados?`
       ];
     }
 
@@ -237,9 +248,9 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
   } catch (error) {
     // Return default follow-up prompts in case of error
     return [
-      `How does this apply in different jurisdictions?`,
-      `What are recent landmark cases for this topic?`,
-      `What practical considerations should be noted?`
+      `Como isso se aplica em diferentes jurisdições?`,
+      `Quais são os casos paradigmáticos recentes sobre o tema?`,
+      `Quais cuidados práticos devem ser observados?`
     ];
   }
 }
@@ -451,7 +462,7 @@ export function formatResponseToHTML(text: string): string {
     // D. Detect "Implied" Headings (Short lines, title-case, often ending with a colon)
     // Rules: Short line (< 50 chars), not in a list, maybe ending in ':'
     const isTitleCase = line.split(' ').every(word => 
-      word.length === 0 || word[0] === word[0].toUpperCase() || /^(a|an|the|of|for|in|on|at|with)$/i.test(word)
+      word.length === 0 || word[0] === word[0].toUpperCase() || /^(a|an|the|of|for|in|on|at|with|o|as|os|e|de|da|do|das|dos|em|na|no|nas|nos|para|com|por|ou)$/i.test(word)
     );
     
     if (line.length < 50 && line.length > 3 && !inList && (line.endsWith(':') || (isTitleCase && i < lines.length - 1 && lines[i+1].trim() !== ''))) {
@@ -638,6 +649,13 @@ export const generateChatResponse = async (
       }
     }
 
+    // Always answer in Brazilian Portuguese
+    if (parts.length > 0 && 'text' in parts[0]) {
+      parts[0].text = `${parts[0].text}\n\n${PT_BR_INSTRUCTION}`;
+    } else {
+      parts.push({ text: PT_BR_INSTRUCTION });
+    }
+
     // Send message to model
 
     // Try to send the message with a timeout
@@ -658,10 +676,10 @@ export const generateChatResponse = async (
       return formattedResponse;
     } catch (apiError: any) {
       // Return a friendly error message
-      return "I apologize, but I encountered a technical issue while generating a response. Please try asking your question again or contact support if the problem persists.";
+      return "Desculpe, ocorreu um problema técnico ao gerar a resposta. Tente fazer sua pergunta novamente ou entre em contato com o suporte se o problema continuar.";
     }
   } catch (error: any) {
-    return "Sorry, I'm having trouble processing your request right now. Please try again later.";
+    return "Desculpe, estou com dificuldade para processar sua solicitação no momento. Tente novamente mais tarde.";
   }
 };
 
@@ -726,7 +744,7 @@ export const analyzeDocument = async (
           mimeType: mimeType
         }
       },
-      { text: analysisPrompt }
+      { text: `${analysisPrompt}\n\n${PT_BR_INSTRUCTION}` }
     ];
 
     // Set a timeout for the API call
@@ -755,9 +773,9 @@ export const analyzeDocument = async (
     return formatResponseToHTML(analysisText);
   } catch (error: any) {
     if (error.message === 'Document analysis timed out') {
-      throw new Error('Document analysis took too long. Please try with a smaller document or contact support.');
+      throw new Error('A análise do documento demorou demais. Tente com um documento menor ou entre em contato com o suporte.');
     }
-    throw new Error('Failed to analyze document: ' + error.message);
+    throw new Error('Falha ao analisar o documento: ' + error.message);
   }
 };
 
@@ -798,7 +816,7 @@ export const compareDocuments = async (
           mimeType: mimeType2
         }
       },
-      { text: prompt }
+      { text: `${prompt}\n\n${PT_BR_INSTRUCTION}` }
     ];
 
     // Generate content with both files and the comparison prompt
@@ -818,7 +836,7 @@ export const compareDocuments = async (
     // Process the response for better formatting
     return formatResponseToHTML(comparisonText);
   } catch (error: any) {
-    throw new Error('Failed to compare documents: ' + error.message);
+    throw new Error('Falha ao comparar os documentos: ' + error.message);
   }
 };
 
@@ -861,7 +879,7 @@ export const generateContentWithFile = async (
     }
 
     if (getFile.state === 'FAILED') {
-      throw new Error('File processing on Google AI failed');
+      throw new Error('Falha no processamento do arquivo pelo Google AI');
     }
 
 
@@ -873,13 +891,13 @@ export const generateContentWithFile = async (
           fileUri: getFile.uri,
         },
       },
-      { text: `${prompt}\n\nPlease respond in professional legal HTML format (headings, bullet points, bolding).` },
+      { text: `${prompt}\n\nPlease respond in professional legal HTML format (headings, bullet points, bolding).\n\n${PT_BR_INSTRUCTION}` },
     ]);
 
     const resText = result.response.text();
     return formatResponseToHTML(resText);
   } catch (error: any) {
-    throw new Error('Failed to process document with AI: ' + error.message);
+    throw new Error('Falha ao processar o documento com IA: ' + error.message);
   }
 };
 

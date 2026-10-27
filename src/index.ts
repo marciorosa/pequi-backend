@@ -14,9 +14,14 @@ const app = express();
 const PORT = Number(process.env.PORT);
 
 // CORS configuration
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim())
-  : [];
+// Production domains are always allowed, plus anything listed in FRONTEND_URL (comma-separated)
+const DEFAULT_ALLOWED_ORIGINS = ['https://pequi.me', 'https://www.pequi.me'];
+const allowedOrigins = Array.from(new Set([
+  ...DEFAULT_ALLOWED_ORIGINS,
+  ...(process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim()).filter(Boolean)
+    : []),
+]));
 
 /**
  * CORS options configuration
@@ -33,11 +38,8 @@ const corsOptions = {
       allowed.replace(/\/$/, '') === normalizedOrigin
     );
 
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    // Not allowed: answer without CORS headers instead of throwing (a thrown error turned the preflight into a 500)
+    callback(null, isAllowed);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -50,7 +52,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Special handling for Stripe webhooks - must come before express.json()
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+app.use(['/api/stripe/webhook', '/stripe/webhook'], express.raw({ type: 'application/json' }));
 
 // Regular middleware for other routes
 app.use(express.json({ limit: '20mb' }));
@@ -63,7 +65,7 @@ const timeoutMiddleware = (req: Request, res: Response, next: NextFunction) => {
   req.setTimeout(55000, () => {
     if (!res.headersSent) {
       res.status(504).json({
-        message: 'Request timeout - operation took too long',
+        message: 'Tempo limite da requisição esgotado - a operação demorou demais',
         error: 'Gateway Timeout'
       });
     }
@@ -72,7 +74,7 @@ const timeoutMiddleware = (req: Request, res: Response, next: NextFunction) => {
   res.setTimeout(55000, () => {
     if (!res.headersSent) {
       res.status(504).json({
-        message: 'Response timeout - operation took too long',
+        message: 'Tempo limite da resposta esgotado - a operação demorou demais',
         error: 'Gateway Timeout'
       });
     }
@@ -99,7 +101,7 @@ mongoose.connect(MONGO_URI, {
 
 // Routes
 app.get('/', (req: Request, res: Response) => {
-  res.json({ message: 'Welcome to AIForLawyers API' });
+  res.json({ message: 'Bem-vindo à API do Pequi' });
 });
 
 app.get('/health', (req: Request, res: Response) => {
@@ -128,24 +130,30 @@ import vaultRoutes from './routes/vault.routes';
 import workflowRoutes from './routes/workflow.routes';
 import webhookRoutes from './routes/webhook.routes';
 
-// Register routes
-app.use('/api/auth', authRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/stripe', stripeRoutes);
-app.use('/api/contact', contactRoutes);
-app.use('/api/vault', vaultRoutes);
-app.use('/api/workflows', workflowRoutes);
-app.use('/api/webhooks', webhookRoutes);
+// Register routes (served under /api and also without the prefix, so the
+// frontend works whether NEXT_PUBLIC_API_URL ends in /api or not)
+const routes: Array<[string, express.Router]> = [
+  ['/auth', authRoutes],
+  ['/ai', aiRoutes],
+  ['/chats', chatRoutes],
+  ['/documents', documentRoutes],
+  ['/notifications', notificationRoutes],
+  ['/stripe', stripeRoutes],
+  ['/contact', contactRoutes],
+  ['/vault', vaultRoutes],
+  ['/workflows', workflowRoutes],
+  ['/webhooks', webhookRoutes],
+];
+for (const [path, router] of routes) {
+  app.use([`/api${path}`, path], router);
+}
 
 /**
  * Global Error Handling Middleware
  */
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   let statusCode = 500;
-  let message = 'Something went wrong!';
+  let message = 'Algo deu errado!';
   let details = undefined;
 
   if (err instanceof AppError) {
@@ -157,7 +165,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   } else if (err.name === 'ValidationError') {
     // Handle Mongoose validation errors
     statusCode = 400;
-    message = 'Data validation failed';
+    message = 'Falha na validação dos dados';
     details = err.errors;
   }
 
@@ -170,7 +178,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 // Handle 404
 app.use((req: Request, res: Response) => {
-  res.status(404).json({ message: 'Route not found' });
+  res.status(404).json({ message: 'Rota não encontrada' });
 });
 
 // Start server

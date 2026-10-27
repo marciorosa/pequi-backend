@@ -58,7 +58,7 @@ ChatSchema.pre('save', function(next) {
   const chat = this as unknown as IChat;
   
   // Auto-generate title if not provided and messages exist
-  if ((!chat.title || chat.title === 'New Chat') && chat.messages.length > 0) {
+  if ((!chat.title || chat.title === 'New Chat' || chat.title === 'Nova conversa') && chat.messages.length > 0) {
     const firstUserMessage = chat.messages.find(msg => msg.role === 'user');
     if (firstUserMessage) {
       // Truncate long messages and add ellipsis

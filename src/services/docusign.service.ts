@@ -18,7 +18,7 @@ export class DocuSignService {
             const basePath = process.env.DOCUSIGN_BASE_PATH;
 
             if (!privateKey || !integrationKey || !userId) {
-                throw new ValidationError('DocuSign configuration missing: RSA Private Key, Integration Key, or User ID');
+                throw new ValidationError('Configuração do DocuSign ausente: chave privada RSA, Integration Key ou User ID');
             }
 
             if (basePath) {
@@ -43,7 +43,7 @@ export class DocuSignService {
             this.apiClient.addDefaultHeader('Authorization', 'Bearer ' + results.body.access_token);
             return results.body.access_token;
         } catch (error) {
-            throw new ExternalServiceError('DocuSign Auth', 'Failed to authenticate with DocuSign', error);
+            throw new ExternalServiceError('DocuSign Auth', 'Falha ao autenticar no DocuSign', error);
         }
     }
 
@@ -125,7 +125,7 @@ export class DocuSignService {
             const accountId = process.env.DOCUSIGN_ACCOUNT_ID;
 
             if (!accountId) {
-                throw new ValidationError('DocuSign Account ID is missing');
+                throw new ValidationError('O Account ID do DocuSign não foi configurado');
             }
 
             const results = await envelopesApi.createEnvelope(accountId, {
@@ -134,7 +134,7 @@ export class DocuSignService {
 
             return results;
         } catch (error: any) {
-            throw new ExternalServiceError('DocuSign', 'Failed to send envelope', error);
+            throw new ExternalServiceError('DocuSign', 'Falha ao enviar o envelope', error);
         }
     }
 
@@ -148,7 +148,7 @@ export class DocuSignService {
             const accountId = process.env.DOCUSIGN_ACCOUNT_ID;
 
             if (!accountId) {
-                throw new ValidationError('DocuSign Account ID is missing');
+                throw new ValidationError('O Account ID do DocuSign não foi configurado');
             }
 
             // This returns the document as a binary string (Buffer in Node context when using the SDK)
@@ -157,7 +157,7 @@ export class DocuSignService {
             // The SDK might return the results as a string or a buffer depending on the version/config
             return Buffer.from(result, 'binary');
         } catch (error: any) {
-            throw new ExternalServiceError('DocuSign', 'Failed to download document', error);
+            throw new ExternalServiceError('DocuSign', 'Falha ao baixar o documento', error);
         }
     }
 }

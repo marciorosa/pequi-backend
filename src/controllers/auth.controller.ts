@@ -21,16 +21,16 @@ dotenv.config();
  */
 const validateRegistrationInput = (name: string, email: string, password: string) => {
   if (!name || !email || !password) {
-    throw new ValidationError('Name, email, and password are required');
+    throw new ValidationError('Nome, e-mail e senha são obrigatórios');
   }
 
   const emailRegex = /^\S+@\S+\.\S+$/;
   if (!emailRegex.test(email)) {
-    throw new ValidationError('Please enter a valid email');
+    throw new ValidationError('Informe um e-mail válido');
   }
 
   if (password.length < 6) {
-    throw new ValidationError('Password must be at least 6 characters');
+    throw new ValidationError('A senha deve ter pelo menos 6 caracteres');
   }
 };
 
@@ -47,7 +47,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new ValidationError('User already exists');
+      throw new ValidationError('Já existe um usuário com este e-mail');
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -69,7 +69,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
 
     return res.status(201).json({
-      message: 'User registered successfully',
+      message: 'Usuário cadastrado com sucesso',
       token,
       user: {
         id: user._id,
@@ -91,18 +91,18 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const { email, password } = req.body;
 
     if (!email || !password) {
-      throw new ValidationError('Email and password are required');
+      throw new ValidationError('E-mail e senha são obrigatórios');
     }
 
 
     const user = await User.findOne({ email });
     if (!user) {
-      throw new AuthError('Invalid credentials');
+      throw new AuthError('Credenciais inválidas');
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new AuthError('Invalid credentials');
+      throw new AuthError('Credenciais inválidas');
     }
 
     const token = jwt.sign(
@@ -113,7 +113,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
 
     return res.json({
-      message: 'Login successful',
+      message: 'Login realizado com sucesso',
       token,
       user: {
         id: user._id,
@@ -132,12 +132,12 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 export const getProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AuthError('Unauthorized');
+      throw new AuthError('Não autorizado');
     }
 
     const user = await User.findById(req.user.id).select('-password');
     if (!user) {
-      throw new NotFoundError('User');
+      throw new NotFoundError('Usuário');
     }
 
     let planTier = 'Free';
@@ -175,10 +175,10 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
         nextBillingDate: nextBillingDate,
         limits: limits,
         features: [
-          'Basic document analysis',
-          'Limited AI chat assistance',
-          'Document storage (100 MB)',
-          'Email support'
+          'Análise básica de documentos',
+          'Assistência limitada por chat com IA',
+          'Armazenamento de documentos (100 MB)',
+          'Suporte por e-mail'
         ]
       }
     });
@@ -193,12 +193,12 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AuthError('Unauthorized');
+      throw new AuthError('Não autorizado');
     }
 
     const user = await User.findById(req.user.id);
     if (!user) {
-      throw new NotFoundError('User');
+      throw new NotFoundError('Usuário');
     }
 
     const { fullName, email, company, role, phone } = req.body;
@@ -222,7 +222,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
     await user.save();
 
     return res.json({
-      message: 'Profile updated successfully',
+      message: 'Perfil atualizado com sucesso',
       user: {
         id: user._id,
         name: user.name,
@@ -246,14 +246,14 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     const { email } = req.body;
 
     if (!email) {
-      throw new ValidationError('Email is required');
+      throw new ValidationError('O e-mail é obrigatório');
     }
 
     const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(200).json({
-        message: 'If an account with that email exists, we have sent a password reset link'
+        message: 'Se existir uma conta com esse e-mail, enviamos um link para redefinir a senha'
       });
     }
 
@@ -269,7 +269,7 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     await emailService.sendPasswordResetEmail(email, resetUrl);
 
     return res.status(200).json({
-      message: 'If an account with that email exists, we have sent a password reset link'
+      message: 'Se existir uma conta com esse e-mail, enviamos um link para redefinir a senha'
     });
   } catch (error) {
     next(error);
@@ -284,7 +284,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     const { email, token, newPassword } = req.body;
 
     if (!email || !token || !newPassword) {
-      throw new ValidationError('All fields are required');
+      throw new ValidationError('Todos os campos são obrigatórios');
     }
 
     const user = await User.findOne({
@@ -293,12 +293,12 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     });
 
     if (!user || !user.resetPasswordToken) {
-      throw new ValidationError('Invalid or expired reset token');
+      throw new ValidationError('Token de redefinição inválido ou expirado');
     }
 
     const isValidToken = await bcrypt.compare(token, user.resetPasswordToken);
     if (!isValidToken) {
-      throw new ValidationError('Invalid or expired reset token');
+      throw new ValidationError('Token de redefinição inválido ou expirado');
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -309,7 +309,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    return res.status(200).json({ message: 'Password has been reset successfully' });
+    return res.status(200).json({ message: 'Senha redefinida com sucesso' });
   } catch (error) {
     next(error);
   }
@@ -321,24 +321,24 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 export const changePassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AuthError('Unauthorized');
+      throw new AuthError('Não autorizado');
     }
 
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      throw new ValidationError('Both current and new passwords are required');
+      throw new ValidationError('Informe a senha atual e a nova senha');
     }
 
     const user = await User.findById(req.user.id);
     if (!user) {
-      throw new NotFoundError('User');
+      throw new NotFoundError('Usuário');
     }
 
     // Compare current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
-      throw new ValidationError('Current password is incorrect');
+      throw new ValidationError('A senha atual está incorreta');
     }
 
     // Hash new password
@@ -348,7 +348,7 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
     user.password = hashedPassword;
     await user.save();
 
-    return res.status(200).json({ message: 'Password has been changed successfully' });
+    return res.status(200).json({ message: 'Senha alterada com sucesso' });
   } catch (error) {
     next(error);
   }

@@ -8,7 +8,7 @@ export const generateAssistantResponse = async (req: AuthRequest, res: Response)
     const { prompt, context } = req.body;
     
     if (!prompt) {
-      res.status(400).json({ message: 'Prompt is required' });
+      res.status(400).json({ message: 'O prompt é obrigatório' });
       return;
     }
     
@@ -28,7 +28,7 @@ export const generateAssistantResponse = async (req: AuthRequest, res: Response)
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating AI response', error: (error as Error).message });
+    res.status(500).json({ message: 'Erro ao gerar a resposta da IA', error: (error as Error).message });
   }
 };
 
@@ -38,7 +38,7 @@ export const analyzeDocument = async (req: AuthRequest, res: Response): Promise<
     const { document, options } = req.body;
     
     if (!document) {
-      res.status(400).json({ message: 'Document content is required' });
+      res.status(400).json({ message: 'O conteúdo do documento é obrigatório' });
       return;
     }
 
@@ -72,9 +72,9 @@ export const analyzeDocument = async (req: AuthRequest, res: Response): Promise<
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error analyzing document', 
+      message: 'Erro ao analisar o documento', 
       error: (error as Error).message,
-      text: `Error: ${(error as Error).message}. Please try again with a different document.`
+      text: `Erro: ${(error as Error).message}. Tente novamente com outro documento.`
     });
   }
 };
@@ -86,7 +86,7 @@ export const searchLegalDatabase = async (req: AuthRequest, res: Response): Prom
     const filters = req.query.filters ? JSON.parse(req.query.filters as string) : undefined;
     
     if (!query) {
-      res.status(400).json({ message: 'Search query is required' });
+      res.status(400).json({ message: 'O termo de pesquisa é obrigatório' });
       return;
     }
     
@@ -101,29 +101,29 @@ export const searchLegalDatabase = async (req: AuthRequest, res: Response): Prom
       {
         id: "case-001",
         title: "Smith v. Johnson",
-        type: "Case Law",
+        type: "Jurisprudência",
         year: 2020,
         relevance: 0.95,
-        summary: "Landmark case establishing precedent for AI contract interpretation.",
-        formattedContent: "In this pivotal case, the court ruled that AI-generated contract interpretations can be admissible as evidence when certain reliability criteria are met."
+        summary: "Caso paradigmático que estabeleceu precedente para a interpretação de contratos por IA.",
+        formattedContent: "Neste caso decisivo, o tribunal decidiu que interpretações contratuais geradas por IA podem ser admitidas como prova quando certos critérios de confiabilidade são atendidos."
       },
       {
         id: "reg-042",
-        title: "Data Protection Regulation 42",
-        type: "Regulation",
+        title: "Regulamento de Proteção de Dados 42",
+        type: "Regulamento",
         year: 2022,
         relevance: 0.87,
-        summary: "Regulation governing the use of AI in legal proceedings.",
-        formattedContent: "Section 3.1: AI systems used in legal proceedings must maintain an audit trail of all decisions and provide explainability mechanisms."
+        summary: "Regulamento que disciplina o uso de IA em processos judiciais.",
+        formattedContent: "Seção 3.1: sistemas de IA usados em processos judiciais devem manter trilha de auditoria de todas as decisões e oferecer mecanismos de explicabilidade."
       },
       {
         id: "article-103",
-        title: "AI Ethics in Legal Practice",
-        type: "Article",
+        title: "Ética da IA na Prática Jurídica",
+        type: "Artigo",
         year: 2023,
         relevance: 0.82,
-        summary: "Scholarly article on ethical considerations of AI in law.",
-        formattedContent: "The article explores three key areas: bias mitigation, transparency requirements, and maintaining human oversight in high-stakes legal AI applications."
+        summary: "Artigo acadêmico sobre considerações éticas da IA no Direito.",
+        formattedContent: "O artigo explora três áreas principais: mitigação de vieses, requisitos de transparência e manutenção da supervisão humana em aplicações jurídicas de IA de alto impacto."
       }
     ];
     
@@ -135,7 +135,7 @@ export const searchLegalDatabase = async (req: AuthRequest, res: Response): Prom
       results: searchResults
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error searching legal database', error: (error as Error).message });
+    res.status(500).json({ message: 'Erro ao pesquisar a base jurídica', error: (error as Error).message });
   }
 };
 
@@ -157,7 +157,9 @@ export const chatWithAssistant = async (req: Request, res: Response): Promise<vo
     
     // Check if response appears to be an error message (service now returns user-friendly errors)
     const isErrorResponse = response.includes("I apologize, but I encountered a technical issue") || 
-                           response.includes("Sorry, I'm having trouble processing your request");
+                           response.includes("Sorry, I'm having trouble processing your request") ||
+                           response.includes("Desculpe, ocorreu um problema técnico") ||
+                           response.includes("Desculpe, estou com dificuldade para processar sua solicitação");
     
     // If it's an error message, still return 200 with the friendly message for the user to see
     res.status(200).json({
@@ -169,15 +171,15 @@ export const chatWithAssistant = async (req: Request, res: Response): Promise<vo
   } catch (error: any) {
     
     // In case the service threw an error instead of returning a string
-    let errorMessage = 'Failed to generate response';
+    let errorMessage = 'Falha ao gerar a resposta';
     
     if (error.message) {
       errorMessage = error.message;
     }
     
     res.status(500).json({ 
-      text: `I apologize, but I encountered a technical issue while processing your request. Please try again later.`, // Keep 'text' for backward compatibility
-      message: `I apologize, but I encountered a technical issue while processing your request. Please try again later.`, // Add 'message' for new format
+      text: `Desculpe, ocorreu um problema técnico ao processar sua solicitação. Tente novamente mais tarde.`, // Keep 'text' for backward compatibility
+      message: `Desculpe, ocorreu um problema técnico ao processar sua solicitação. Tente novamente mais tarde.`, // Add 'message' for new format
       error: errorMessage,
       timestamp: new Date().toISOString()
     });
@@ -295,26 +297,26 @@ function generateContextualSuggestions(query: string, response: string): string[
   // Generate suggestions based on the query type and detected legal terms
   const suggestions: string[] = [];
   
-  if (query.toLowerCase().includes('contract') || response.toLowerCase().includes('contract')) {
-    suggestions.push('Would you like to see a template for this type of contract?');
+  if (query.toLowerCase().includes('contract') || response.toLowerCase().includes('contract') || query.toLowerCase().includes('contrato') || response.toLowerCase().includes('contrato')) {
+    suggestions.push('Quer ver um modelo para este tipo de contrato?');
   }
   
-  if (query.toLowerCase().includes('case') || response.toLowerCase().includes('case law')) {
-    suggestions.push('Would you like me to find relevant case precedents on this issue?');
+  if (query.toLowerCase().includes('case') || response.toLowerCase().includes('case law') || query.toLowerCase().includes('caso') || response.toLowerCase().includes('jurisprud')) {
+    suggestions.push('Quer que eu encontre precedentes relevantes sobre esta questão?');
   }
   
-  if (response.toLowerCase().includes('statute') || response.toLowerCase().includes('regulation')) {
-    suggestions.push('Would you like me to explain the specific regulations that apply here?');
+  if (response.toLowerCase().includes('statute') || response.toLowerCase().includes('regulation') || response.toLowerCase().includes('lei ') || response.toLowerCase().includes('regulament')) {
+    suggestions.push('Quer que eu explique as normas específicas aplicáveis a este caso?');
   }
   
   // Add some default suggestions if we don't have enough context-specific ones
   if (suggestions.length < 2) {
-    suggestions.push('Would you like me to explain this in more detail?');
-    suggestions.push('Do you need help drafting a legal document related to this matter?');
+    suggestions.push('Quer que eu explique isso com mais detalhes?');
+    suggestions.push('Precisa de ajuda para redigir um documento jurídico sobre este assunto?');
   }
   
   // Always add this general suggestion
-  suggestions.push('Would you like to ask a follow-up question about this legal matter?');
+  suggestions.push('Quer fazer outra pergunta sobre esta questão jurídica?');
   
   return suggestions.slice(0, 3); // Limit to 3 suggestions
 }
@@ -354,7 +356,7 @@ export const compareDocuments = async (req: AuthRequest, res: Response) => {
     const { document1, document2, options } = req.body;
     
     if (!document1 || !document2) {
-      return res.status(400).json({ message: 'Both documents are required for comparison' });
+      return res.status(400).json({ message: 'Os dois documentos são obrigatórios para a comparação' });
     }
 
     // Extract options
@@ -397,9 +399,9 @@ export const compareDocuments = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error comparing documents', 
+      message: 'Erro ao comparar os documentos', 
       error: (error as Error).message,
-      text: `Error: ${(error as Error).message}. Please try again with different documents.`
+      text: `Erro: ${(error as Error).message}. Tente novamente com outros documentos.`
     });
   }
 };
@@ -410,11 +412,11 @@ export const createAgreement = async (req: AuthRequest, res: Response) => {
     const { data, options } = req.body;
     
     if (!data) {
-      return res.status(400).json({ message: 'Agreement data is required' });
+      return res.status(400).json({ message: 'Os dados do contrato são obrigatórios' });
     }
 
     // Extract options
-    const title = options?.title || 'Legal Agreement';
+    const title = options?.title || 'Contrato Jurídico';
     const templateType = options?.templateType || 'standard';
     const specialRequirements = options?.specialRequirements || '';
     
@@ -450,7 +452,7 @@ export const createAgreement = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error creating agreement', 
+      message: 'Erro ao criar o contrato', 
       error: (error as Error).message 
     });
   }
@@ -462,7 +464,7 @@ export const translateDocument = async (req: AuthRequest, res: Response) => {
     const { document, options } = req.body;
     
     if (!document) {
-      return res.status(400).json({ message: 'Document content is required' });
+      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório' });
     }
 
     // Extract options
@@ -472,7 +474,7 @@ export const translateDocument = async (req: AuthRequest, res: Response) => {
     const includeLegalGlossary = options?.includeLegalGlossary || false;
     
     if (!targetLanguage) {
-      return res.status(400).json({ message: 'Target language is required' });
+      return res.status(400).json({ message: 'O idioma de destino é obrigatório' });
     }
     
     // Prepare the translation prompt
@@ -505,7 +507,7 @@ export const translateDocument = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error translating document', 
+      message: 'Erro ao traduzir o documento', 
       error: (error as Error).message 
     });
   }
@@ -517,7 +519,7 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     const { documentType, templateStyle, specialRequirements, referenceDocumentText } = req.body;
     
     if (!documentType || !templateStyle) {
-      return res.status(400).json({ message: 'Document type and template style are required' });
+      return res.status(400).json({ message: 'O tipo de documento e o estilo do modelo são obrigatórios' });
     }
 
     // Create a prompt for the AI to generate the document
@@ -537,6 +539,10 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       case 'Executive Employment Agreement':
       case 'Contractor Agreement':
       case 'Internship Agreement':
+      case 'Contrato de Trabalho Padrão':
+      case 'Contrato de Trabalho de Executivo':
+      case 'Contrato com Prestador Autônomo':
+      case 'Termo de Compromisso de Estágio':
         prompt += ` Use appropriate language for a ${templateStyle.toLowerCase()}.`;
         break;
       // Add cases for other template styles with specific instructions
@@ -544,6 +550,10 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       case 'Commercial Lease':
       case 'Residential Lease':
       case 'Vacation Property Lease':
+      case 'Locação Imobiliária Padrão':
+      case 'Locação Comercial':
+      case 'Locação Residencial':
+      case 'Locação para Temporada':
         prompt += ` Use appropriate language for a ${templateStyle.toLowerCase()}.`;
         break;
       // NDA templates
@@ -551,6 +561,10 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       case 'Mutual NDA':
       case 'Employee NDA':
       case 'Vendor NDA':
+      case 'NDA Padrão':
+      case 'NDA Mútuo':
+      case 'NDA para Funcionários':
+      case 'NDA para Fornecedores':
         prompt += ` Use appropriate language for a ${templateStyle.toLowerCase()}.`;
         break;
       // Other document types can follow a similar pattern
@@ -559,21 +573,27 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     // Based on document type, add specific sections to include
     switch (documentType) {
       case 'Real Estate Lease':
+      case 'Locação Imobiliária':
         prompt += ` Include sections for: PROPERTY DESCRIPTION, TERM OF TENANCY, RENTAL PAYMENT, SECURITY DEPOSIT, UTILITIES, MAINTENANCE, RULES AND REGULATIONS, TERMINATION CONDITIONS, and SIGNATURES.`;
         break;
       case 'Employment Contract':
+      case 'Contrato de Trabalho':
         prompt += ` Include sections for: PARTIES, POSITION AND DUTIES, COMPENSATION, TERM AND TERMINATION, CONFIDENTIALITY, INTELLECTUAL PROPERTY, NON-COMPETE, GOVERNING LAW, and SIGNATURES.`;
         break;
       case 'Non-Disclosure Agreement':
+      case 'Acordo de Confidencialidade':
         prompt += ` Include sections for: PARTIES, DEFINITION OF CONFIDENTIAL INFORMATION, OBLIGATIONS OF RECEIVING PARTY, EXCLUSIONS FROM CONFIDENTIAL INFORMATION, TERM, RETURN OF INFORMATION, REMEDIES, and SIGNATURES.`;
         break;
       case 'Service Agreement':
+      case 'Contrato de Prestação de Serviços':
         prompt += ` Include sections for: PARTIES, SERVICES TO BE PROVIDED, PAYMENT TERMS, TERM AND TERMINATION, INTELLECTUAL PROPERTY, WARRANTIES, LIMITATION OF LIABILITY, INDEMNIFICATION, and SIGNATURES.`;
         break;
       case 'Partnership Agreement':
+      case 'Contrato de Sociedade':
         prompt += ` Include sections for: PARTIES, FORMATION, CAPITAL CONTRIBUTIONS, PROFITS AND LOSSES, MANAGEMENT, WITHDRAWAL AND DISSOLUTION, TRANSFER OF PARTNERSHIP INTEREST, DISPUTE RESOLUTION, and SIGNATURES.`;
         break;
       case 'Sales Contract':
+      case 'Contrato de Compra e Venda':
         prompt += ` Include sections for: PARTIES, DESCRIPTION OF GOODS, PURCHASE PRICE, DELIVERY, INSPECTION, WARRANTIES, RISK OF LOSS, REMEDIES FOR BREACH, GOVERNING LAW, and SIGNATURES.`;
         break;
     }

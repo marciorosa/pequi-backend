@@ -32,12 +32,12 @@ export const stripeService = {
   createCheckoutSession: async (priceId: string, userId: string, userEmail: string) => {
     try {
       if (!isValidPriceId(priceId)) {
-        throw new ValidationError(`Invalid price ID: ${priceId}`);
+        throw new ValidationError(`ID de preço inválido: ${priceId}`);
       }
 
       const user = await User.findById(userId);
       if (!user) {
-        throw new NotFoundError('User');
+        throw new NotFoundError('Usuário');
       }
 
       let customerId = user.stripeCustomerId;
@@ -77,6 +77,7 @@ export const stripeService = {
           }
         ],
         mode: 'subscription',
+        locale: 'pt-BR',
         success_url: `${process.env.FRONTEND_URL}/dashboard/billing?success=true`,
         cancel_url: `${process.env.FRONTEND_URL}/dashboard/billing?canceled=true`,
         customer: customerId,
@@ -89,7 +90,7 @@ export const stripeService = {
       return { sessionId: session.id };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw new ExternalServiceError('Stripe', 'Failed to create checkout session', error);
+      throw new ExternalServiceError('Stripe', 'Falha ao criar a sessão de pagamento', error);
     }
   },
 
@@ -100,7 +101,7 @@ export const stripeService = {
     try {
       const user = await User.findById(userId);
       if (!user || !user.stripeCustomerId) {
-        throw new ValidationError('User or Stripe customer ID not found');
+        throw new ValidationError('Usuário ou ID de cliente Stripe não encontrado');
       }
 
       const session = await stripe.billingPortal.sessions.create({
@@ -111,7 +112,7 @@ export const stripeService = {
       return { url: session.url };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw new ExternalServiceError('Stripe', 'Failed to create portal session', error);
+      throw new ExternalServiceError('Stripe', 'Falha ao abrir o portal de cobrança', error);
     }
   },
 
@@ -122,7 +123,7 @@ export const stripeService = {
     try {
       const user = await User.findById(userId);
       if (!user) {
-        throw new NotFoundError('User');
+        throw new NotFoundError('Usuário');
       }
 
       if (!user.subscriptionId) {
@@ -209,7 +210,7 @@ export const stripeService = {
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw new ExternalServiceError('Stripe', 'Failed to fetch subscription', error);
+      throw new ExternalServiceError('Stripe', 'Falha ao carregar a assinatura', error);
     }
   },
 
@@ -220,14 +221,14 @@ export const stripeService = {
     try {
       const user = await User.findById(userId);
       if (!user || !user.subscriptionId) {
-        throw new ValidationError('User or subscription not found');
+        throw new ValidationError('Usuário ou assinatura não encontrados');
       }
 
       const subscription = await Subscription.findById(user.subscriptionId);
       if (!subscription || 
           subscription.stripeSubscriptionId === 'pending' || 
           subscription.stripeSubscriptionId.startsWith('pending_')) {
-        throw new ValidationError('Subscription is not yet active and cannot be canceled');
+        throw new ValidationError('A assinatura ainda não está ativa e não pode ser cancelada');
       }
 
       await stripe.subscriptions.update(
@@ -248,7 +249,7 @@ export const stripeService = {
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw new ExternalServiceError('Stripe', 'Failed to cancel subscription', error);
+      throw new ExternalServiceError('Stripe', 'Falha ao cancelar a assinatura', error);
     }
   },
 
@@ -308,7 +309,7 @@ export const stripeService = {
 
       return { received: true };
     } catch (error) {
-      throw new ExternalServiceError('Stripe Webhook', 'Webhook processing failed', error);
+      throw new ExternalServiceError('Stripe Webhook', 'Falha ao processar o webhook', error);
     }
   },
 
@@ -335,7 +336,7 @@ export const stripeService = {
         downloadUrl: invoice.invoice_pdf
       }));
     } catch (error) {
-      throw new ExternalServiceError('Stripe', 'Failed to fetch invoices', error);
+      throw new ExternalServiceError('Stripe', 'Falha ao carregar as faturas', error);
     }
   }
 };

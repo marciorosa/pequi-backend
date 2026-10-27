@@ -10,7 +10,7 @@ export const getWorkflows = async (req: AuthRequest, res: Response) => {
         const workflows = await Workflow.find({ userId }).sort({ updatedAt: -1 });
         res.json({ workflows });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch workflows' });
+        res.status(500).json({ message: 'Falha ao carregar os fluxos de trabalho' });
     }
 };
 
@@ -31,7 +31,7 @@ export const createWorkflow = async (req: AuthRequest, res: Response) => {
         await workflow.save();
         res.status(201).json({ workflow });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to create workflow' });
+        res.status(500).json({ message: 'Falha ao criar o fluxo de trabalho' });
     }
 };
 
@@ -48,10 +48,10 @@ export const updateWorkflow = async (req: AuthRequest, res: Response) => {
             { new: true }
         );
 
-        if (!workflow) return res.status(404).json({ message: 'Workflow not found' });
+        if (!workflow) return res.status(404).json({ message: 'Fluxo de trabalho não encontrado' });
         res.json({ workflow });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to update workflow' });
+        res.status(500).json({ message: 'Falha ao atualizar o fluxo de trabalho' });
     }
 };
 
@@ -62,11 +62,11 @@ export const deleteWorkflow = async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
 
         const workflow = await Workflow.findOneAndDelete({ _id: id, userId });
-        if (!workflow) return res.status(404).json({ message: 'Workflow not found' });
+        if (!workflow) return res.status(404).json({ message: 'Fluxo de trabalho não encontrado' });
 
-        res.json({ message: 'Workflow deleted' });
+        res.json({ message: 'Fluxo de trabalho excluído' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to delete workflow' });
+        res.status(500).json({ message: 'Falha ao excluir o fluxo de trabalho' });
     }
 };
 
@@ -78,7 +78,7 @@ export const runWorkflow = async (req: AuthRequest, res: Response) => {
         const { isSimulation, fileName } = req.body;
 
         const workflow = await Workflow.findOne({ _id: id, userId });
-        if (!workflow) return res.status(404).json({ message: 'Workflow not found' });
+        if (!workflow) return res.status(404).json({ message: 'Fluxo de trabalho não encontrado' });
 
         // Update stats
         workflow.runCount += 1;
@@ -96,11 +96,11 @@ export const runWorkflow = async (req: AuthRequest, res: Response) => {
         });
 
         res.json({
-            message: isSimulation ? 'Simulation started' : 'Workflow execution started',
+            message: isSimulation ? 'Simulação iniciada' : 'Execução do fluxo de trabalho iniciada',
             executionId: Date.now().toString(),
             steps: workflow.nodes.length
         });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to run workflow' });
+        res.status(500).json({ message: 'Falha ao executar o fluxo de trabalho' });
     }
 };

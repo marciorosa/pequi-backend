@@ -13,14 +13,14 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'No token provided or invalid token format' });
+    return res.status(401).json({ message: 'Token não informado ou em formato inválido' });
   }
 
   // Extract the token without the 'Bearer ' prefix
   const token = authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ message: 'Authentication token is required' });
+    return res.status(401).json({ message: 'O token de autenticação é obrigatório' });
   }
 
   try {
@@ -38,6 +38,6 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
 
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    return res.status(401).json({ message: 'Token inválido ou expirado' });
   }
 }; 

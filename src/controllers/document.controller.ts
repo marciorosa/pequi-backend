@@ -13,7 +13,7 @@ export const getDocumentHistory = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error fetching document history', 
+      message: 'Erro ao carregar o histórico de documentos', 
       error: (error as Error).message 
     });
   }
@@ -23,13 +23,13 @@ export const getDocumentHistory = async (req: AuthRequest, res: Response) => {
 export const createDocument = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const { title, content, documentType } = req.body;
     
     if (!title || !content || !documentType) {
-      return res.status(400).json({ message: 'Title, content, and document type are required' });
+      return res.status(400).json({ message: 'Título, conteúdo e tipo de documento são obrigatórios' });
     }
     
     // Here, you would typically save the document to your database
@@ -40,8 +40,8 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     await createNotification(
       req.user.id,
       'document',
-      'Document Created',
-      `Your document "${title}" has been successfully created.`,
+      'Documento criado',
+      `Seu documento "${title}" foi criado com sucesso.`,
       documentId
     );
     
@@ -57,7 +57,7 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error creating document', 
+      message: 'Erro ao criar o documento', 
       error: (error as Error).message 
     });
   }
@@ -67,14 +67,14 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
 export const updateDocument = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
     
     const documentId = req.params.id;
     const { title, content } = req.body;
     
     if (!title && !content) {
-      return res.status(400).json({ message: 'At least one field to update is required' });
+      return res.status(400).json({ message: 'Informe pelo menos um campo para atualizar' });
     }
     
     // Here, you would update the document in your database
@@ -84,18 +84,18 @@ export const updateDocument = async (req: AuthRequest, res: Response) => {
     await createNotification(
       req.user.id,
       'document',
-      'Document Updated',
-      `Your document "${title || 'Untitled'}" has been successfully updated.`,
+      'Documento atualizado',
+      `Seu documento "${title || 'Sem título'}" foi atualizado com sucesso.`,
       documentId
     );
     
     res.json({
       success: true,
-      message: 'Document updated successfully'
+      message: 'Documento atualizado com sucesso'
     });
   } catch (error) {
     res.status(500).json({ 
-      message: 'Error updating document', 
+      message: 'Erro ao atualizar o documento', 
       error: (error as Error).message 
     });
   }

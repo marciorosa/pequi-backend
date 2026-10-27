@@ -38,13 +38,13 @@ router.post('/docusign', async (req: Request, res: Response) => {
             if (userId && mongoose.Types.ObjectId.isValid(userId)) {
                 const user = await User.findById(userId);
                 if (user) {
-                    // Find or create 'Signed Documents' folder
-                    let folder = await VaultFolder.findOne({ userId, name: 'Signed Documents' });
+                    // Find or create 'Documentos Assinados' folder (also matches the legacy English name)
+                    let folder = await VaultFolder.findOne({ userId, name: { $in: ['Documentos Assinados', 'Signed Documents'] } });
                     if (!folder) {
                         folder = await VaultFolder.create({
                             userId,
-                            name: 'Signed Documents',
-                            description: 'Documents signed via DocuSign',
+                            name: 'Documentos Assinados',
+                            description: 'Documentos assinados via DocuSign',
                             color: '#10b981', // Green for signed
                             files: []
                         });
@@ -58,7 +58,7 @@ router.post('/docusign', async (req: Request, res: Response) => {
                         fileBuffer = await DocuSignService.getDocument(envelopeId, 'combined');
                     }
 
-                    const fileName = `Signed_${envelopeSummary.emailSubject || 'Document'}_${Date.now()}.pdf`;
+                    const fileName = `Assinado_${envelopeSummary.emailSubject || 'Documento'}_${Date.now()}.pdf`;
 
                     const { s3Key, s3Url } = await s3Service.uploadFile(
                         fileBuffer,
@@ -84,15 +84,15 @@ router.post('/docusign', async (req: Request, res: Response) => {
                     // 2. Notify the Lawyer via Email
                     await sendWorkflowEmail(
                         user.email,
-                        '🖋️ Document Signed Successfully',
+                        '🖋️ Documento assinado com sucesso',
                         `
                         <div style="font-family: sans-serif; color: #333;">
-                            <h2 style="color: #10b981;">Contract Signed!</h2>
-                            <p>Hello <strong>${user.name}</strong>,</p>
-                            <p>Great news! The document "<strong>${envelopeSummary.emailSubject}</strong>" has been signed by all parties.</p>
-                            <p>The final signed version has been automatically saved to your <strong>Secure Vault</strong> in the "Signed Documents" folder.</p>
+                            <h2 style="color: #10b981;">Contrato assinado!</h2>
+                            <p>Olá, <strong>${user.name}</strong>,</p>
+                            <p>Ótima notícia! O documento "<strong>${envelopeSummary.emailSubject}</strong>" foi assinado por todas as partes.</p>
+                            <p>A versão final assinada foi salva automaticamente no seu <strong>Cofre Seguro</strong>, na pasta "${folder.name}".</p>
                             <br/>
-                            <a href="${process.env.FRONTEND_URL}/dashboard/vault" style="background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">View in Vault</a>
+                            <a href="${process.env.FRONTEND_URL}/dashboard/vault" style="background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver no Cofre</a>
                         </div>
                         `
                     );

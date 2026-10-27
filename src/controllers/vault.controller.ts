@@ -16,7 +16,7 @@ export const getFolders = async (req: AuthRequest, res: Response) => {
         const folders = await VaultFolder.find({ userId }).select('-passwordHash').sort({ createdAt: -1 });
         res.json({ folders });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to retrieve folders' });
+        res.status(500).json({ message: 'Falha ao carregar as pastas' });
     }
 };
 
@@ -27,7 +27,7 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
         const { name, description, color } = req.body;
 
         if (!name?.trim()) {
-            return res.status(400).json({ message: 'Folder name is required' });
+            return res.status(400).json({ message: 'O nome da pasta é obrigatório' });
         }
 
         const folder = await VaultFolder.create({
@@ -43,7 +43,7 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
 
         res.status(201).json({ folder: folderObj });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to create folder' });
+        res.status(500).json({ message: 'Falha ao criar a pasta' });
     }
 };
 
@@ -55,7 +55,7 @@ export const updateFolder = async (req: AuthRequest, res: Response) => {
         const { name, description, color } = req.body;
 
         const folder = await VaultFolder.findOne({ _id: id, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         if (name?.trim()) folder.name = name.trim();
         if (description !== undefined) folder.description = description.trim();
@@ -67,7 +67,7 @@ export const updateFolder = async (req: AuthRequest, res: Response) => {
         delete folderObj.passwordHash;
         res.json({ folder: folderObj });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to update folder' });
+        res.status(500).json({ message: 'Falha ao atualizar a pasta' });
     }
 };
 
@@ -78,16 +78,16 @@ export const deleteFolder = async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
 
         const folder = await VaultFolder.findOne({ _id: id, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         // Delete all files from S3
         const deletePromises = folder.files.map((file) => s3Service.deleteFile(file.s3Key).catch(() => { }));
         await Promise.all(deletePromises);
 
         await folder.deleteOne();
-        res.json({ message: 'Folder deleted successfully' });
+        res.json({ message: 'Pasta excluída com sucesso' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to delete folder' });
+        res.status(500).json({ message: 'Falha ao excluir a pasta' });
     }
 };
 
@@ -101,20 +101,20 @@ export const lockFolder = async (req: AuthRequest, res: Response) => {
         const { password } = req.body;
 
         if (!password || password.length < 4) {
-            return res.status(400).json({ message: 'Password must be at least 4 characters' });
+            return res.status(400).json({ message: 'A senha deve ter pelo menos 4 caracteres' });
         }
 
         const folder = await VaultFolder.findOne({ _id: id, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const hash = await bcrypt.hash(password, 10);
         folder.isLocked = true;
         folder.passwordHash = hash;
         await folder.save();
 
-        res.json({ message: 'Folder locked successfully' });
+        res.json({ message: 'Pasta bloqueada com sucesso' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to lock folder' });
+        res.status(500).json({ message: 'Falha ao bloquear a pasta' });
     }
 };
 
@@ -126,16 +126,16 @@ export const unlockFolder = async (req: AuthRequest, res: Response) => {
         const { password } = req.body;
 
         const folder = await VaultFolder.findOne({ _id: id, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
-        if (!folder.isLocked) return res.json({ message: 'Folder is not locked' });
-        if (!folder.passwordHash) return res.status(400).json({ message: 'No password set for this folder' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
+        if (!folder.isLocked) return res.json({ message: 'A pasta não está bloqueada' });
+        if (!folder.passwordHash) return res.status(400).json({ message: 'Nenhuma senha definida para esta pasta' });
 
         const match = await bcrypt.compare(password || '', folder.passwordHash);
-        if (!match) return res.status(401).json({ message: 'Incorrect password' });
+        if (!match) return res.status(401).json({ message: 'Senha incorreta' });
 
-        res.json({ message: 'Access granted' });
+        res.json({ message: 'Acesso liberado' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to unlock folder' });
+        res.status(500).json({ message: 'Falha ao desbloquear a pasta' });
     }
 };
 
@@ -147,20 +147,20 @@ export const removeLock = async (req: AuthRequest, res: Response) => {
         const { password } = req.body;
 
         const folder = await VaultFolder.findOne({ _id: id, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         if (folder.isLocked && folder.passwordHash) {
             const match = await bcrypt.compare(password || '', folder.passwordHash);
-            if (!match) return res.status(401).json({ message: 'Incorrect password' });
+            if (!match) return res.status(401).json({ message: 'Senha incorreta' });
         }
 
         folder.isLocked = false;
         folder.passwordHash = undefined;
         await folder.save();
 
-        res.json({ message: 'Lock removed successfully' });
+        res.json({ message: 'Bloqueio removido com sucesso' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to remove lock' });
+        res.status(500).json({ message: 'Falha ao remover o bloqueio' });
     }
 };
 
@@ -173,11 +173,11 @@ export const uploadFiles = async (req: AuthRequest, res: Response) => {
         const { id: folderId } = req.params;
 
         const folder = await VaultFolder.findOne({ _id: folderId, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const files = req.files as Express.Multer.File[];
         if (!files || files.length === 0) {
-            return res.status(400).json({ message: 'No files provided' });
+            return res.status(400).json({ message: 'Nenhum arquivo enviado' });
         }
 
         const uploaded = [];
@@ -211,7 +211,7 @@ export const uploadFiles = async (req: AuthRequest, res: Response) => {
         delete folderObj.passwordHash;
         res.status(201).json({ files: uploaded, folder: folderObj });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to upload files' });
+        res.status(500).json({ message: 'Falha ao enviar os arquivos' });
     }
 };
 
@@ -222,18 +222,18 @@ export const deleteFile = async (req: AuthRequest, res: Response) => {
         const { id: folderId, fileId } = req.params;
 
         const folder = await VaultFolder.findOne({ _id: folderId, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const fileIndex = folder.files.findIndex((f) => f._id.toString() === fileId);
-        if (fileIndex === -1) return res.status(404).json({ message: 'File not found' });
+        if (fileIndex === -1) return res.status(404).json({ message: 'Arquivo não encontrado' });
 
         const [removedFile] = folder.files.splice(fileIndex, 1);
         await s3Service.deleteFile(removedFile.s3Key).catch(() => { });
         await folder.save();
 
-        res.json({ message: 'File deleted successfully' });
+        res.json({ message: 'Arquivo excluído com sucesso' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to delete file' });
+        res.status(500).json({ message: 'Falha ao excluir o arquivo' });
     }
 };
 
@@ -244,15 +244,15 @@ export const getDownloadUrl = async (req: AuthRequest, res: Response) => {
         const { id: folderId, fileId } = req.params;
 
         const folder = await VaultFolder.findOne({ _id: folderId, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const file = folder.files.find((f) => f._id.toString() === fileId);
-        if (!file) return res.status(404).json({ message: 'File not found' });
+        if (!file) return res.status(404).json({ message: 'Arquivo não encontrado' });
 
         const url = await s3Service.getSignedDownloadUrl(file.s3Key);
         res.json({ url, fileName: file.originalName });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to generate download URL' });
+        res.status(500).json({ message: 'Falha ao gerar o link de download' });
     }
 };
 
@@ -267,13 +267,13 @@ export const chatWithFile = async (req: AuthRequest, res: Response) => {
         const { id: folderId, fileId } = req.params;
         const { message, conversationHistory = [], isFirstMessage = false } = req.body;
 
-        if (!message) return res.status(400).json({ message: 'message is required' });
+        if (!message) return res.status(400).json({ message: 'A mensagem é obrigatória' });
 
         const folder = await VaultFolder.findOne({ _id: folderId, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const file = folder.files.find((f) => f._id.toString() === fileId);
-        if (!file) return res.status(404).json({ message: 'File not found' });
+        if (!file) return res.status(404).json({ message: 'Arquivo não encontrado' });
 
         let aiResponse: string;
 
@@ -287,7 +287,9 @@ First, provide a concise summary of this document (2-3 paragraphs covering: docu
 Then answer the user's initial question:
 ${message}
 
-Format your response with the summary under a ## Summary heading, followed by ## Answer for the question response.`;
+Format your response with the summary under a ## Resumo heading, followed by ## Resposta for the question response.
+
+LANGUAGE: Write the entire response in Brazilian Portuguese (pt-BR).`;
 
             aiResponse = await generateChatResponse(firstPrompt, {
                 context: { inlineData: { data, mimeType: contentType } },
@@ -301,7 +303,7 @@ Format your response with the summary under a ## Summary heading, followed by ##
 
         res.json({ response: aiResponse });
     } catch (err: any) {
-        res.status(500).json({ message: 'Failed to chat with file', error: err.message });
+        res.status(500).json({ message: 'Falha ao conversar com o arquivo', error: err.message });
     }
 };
 
@@ -315,14 +317,14 @@ export const saveChatSession = async (req: AuthRequest, res: Response) => {
         const { title, messages } = req.body;
 
         if (!title || !messages?.length) {
-            return res.status(400).json({ message: 'title and messages are required' });
+            return res.status(400).json({ message: 'Título e mensagens são obrigatórios' });
         }
 
         const folder = await VaultFolder.findOne({ _id: folderId, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const file = folder.files.find((f) => f._id.toString() === fileId);
-        if (!file) return res.status(404).json({ message: 'File not found' });
+        if (!file) return res.status(404).json({ message: 'Arquivo não encontrado' });
 
         const session = {
             _id: new mongoose.Types.ObjectId(),
@@ -334,9 +336,9 @@ export const saveChatSession = async (req: AuthRequest, res: Response) => {
         file.chatSessions.push(session as any);
         await folder.save();
 
-        res.status(201).json({ message: 'Chat session saved', session });
+        res.status(201).json({ message: 'Conversa salva', session });
     } catch (err: any) {
-        res.status(500).json({ message: 'Failed to save chat session', error: err.message });
+        res.status(500).json({ message: 'Falha ao salvar a conversa', error: err.message });
     }
 };
 
@@ -347,13 +349,13 @@ export const getChatSessions = async (req: AuthRequest, res: Response) => {
         const { id: folderId, fileId } = req.params;
 
         const folder = await VaultFolder.findOne({ _id: folderId, userId });
-        if (!folder) return res.status(404).json({ message: 'Folder not found' });
+        if (!folder) return res.status(404).json({ message: 'Pasta não encontrada' });
 
         const file = folder.files.find((f) => f._id.toString() === fileId);
-        if (!file) return res.status(404).json({ message: 'File not found' });
+        if (!file) return res.status(404).json({ message: 'Arquivo não encontrado' });
 
         res.json({ sessions: file.chatSessions });
     } catch (err: any) {
-        res.status(500).json({ message: 'Failed to get chat sessions', error: err.message });
+        res.status(500).json({ message: 'Falha ao carregar as conversas', error: err.message });
     }
 };

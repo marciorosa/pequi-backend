@@ -29,21 +29,21 @@ const userSchema = new Schema<IUser>(
   {
     name: {
       type: String,
-      required: [true, 'Name is required'],
+      required: [true, 'O nome é obrigatório'],
       trim: true
     },
     email: {
       type: String,
-      required: [true, 'Email is required'],
+      required: [true, 'O e-mail é obrigatório'],
       unique: true,
       trim: true,
       lowercase: true,
-      match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email']
+      match: [/^\S+@\S+\.\S+$/, 'Informe um e-mail válido']
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
-      minlength: [6, 'Password should be at least 6 characters']
+      required: [true, 'A senha é obrigatória'],
+      minlength: [6, 'A senha deve ter pelo menos 6 caracteres']
     },
     role: {
       type: String,

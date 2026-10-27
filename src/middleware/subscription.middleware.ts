@@ -40,12 +40,12 @@ export const checkFeatureLimit = (feature: FeatureType, increment: boolean = tru
         try {
             const userId = req.user?.id;
             if (!userId) {
-                return res.status(401).json({ message: 'Unauthorized' });
+                return res.status(401).json({ message: 'Não autorizado' });
             }
 
             const user = await User.findById(userId);
             if (!user) {
-                return res.status(404).json({ message: 'User not found' });
+                return res.status(404).json({ message: 'Usuário não encontrado' });
             }
 
             let planTier: 'free' | 'pro' | 'enterprise' = 'free';
@@ -63,11 +63,18 @@ export const checkFeatureLimit = (feature: FeatureType, increment: boolean = tru
             const currentUsage = user.apiUsage ? user.apiUsage[feature] : 0;
 
             if (currentUsage >= (limit as number)) {
-                const featureName = (feature as string).replace('Count', '').replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+                const featureNames: Record<FeatureType, string> = {
+                    searchCount: 'pesquisas',
+                    chatCount: 'conversas',
+                    docsCount: 'documentos',
+                    vaultFolderCount: 'pastas do cofre',
+                    workflowCount: 'fluxos de trabalho',
+                };
+                const featureName = featureNames[feature] ?? (feature as string).replace('Count', '').replace(/([A-Z])/g, ' $1').toLowerCase().trim();
                 
                 const message = (limit === 0)
-                    ? `This feature is not included in your current plan. Please upgrade to Pro to access this.`
-                    : `You have reached your ${featureName} limit for the ${planTier.toUpperCase()} plan. Please upgrade to Pro for more.`;
+                    ? `Este recurso não está incluído no seu plano atual. Faça upgrade para o Pro para ter acesso.`
+                    : `Você atingiu o limite de ${featureName} do plano ${planTier.toUpperCase()}. Faça upgrade para o Pro para continuar.`;
 
                 return res.status(403).json({
                     message,
@@ -84,7 +91,7 @@ export const checkFeatureLimit = (feature: FeatureType, increment: boolean = tru
 
             next();
         } catch (error) {
-            res.status(500).json({ message: 'Failed to check usage limits' });
+            res.status(500).json({ message: 'Falha ao verificar os limites de uso' });
         }
     };
 };

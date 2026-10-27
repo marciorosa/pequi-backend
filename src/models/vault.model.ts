@@ -73,7 +73,7 @@ const VaultFolderSchema = new Schema<IVaultFolder>(
         },
         name: {
             type: String,
-            required: [true, 'Folder name is required'],
+            required: [true, 'O nome da pasta é obrigatório'],
             trim: true
         },
         description: {

@@ -6,10 +6,10 @@ const router = express.Router();
 
 // Submit contact form
 router.post('/submit', [
-  body('name').trim().isLength({ min: 1 }).withMessage('Name is required'),
-  body('email').isEmail().withMessage('Valid email is required'),
-  body('subject').trim().isLength({ min: 1 }).withMessage('Subject is required'),
-  body('message').trim().isLength({ min: 10 }).withMessage('Message must be at least 10 characters'),
+  body('name').trim().isLength({ min: 1 }).withMessage('O nome é obrigatório'),
+  body('email').isEmail().withMessage('Informe um e-mail válido'),
+  body('subject').trim().isLength({ min: 1 }).withMessage('O assunto é obrigatório'),
+  body('message').trim().isLength({ min: 10 }).withMessage('A mensagem deve ter pelo menos 10 caracteres'),
   body('company').optional().trim(),
   body('phone').optional().trim(),
 ], async (req, res) => {
@@ -17,7 +17,7 @@ router.post('/submit', [
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        message: 'Validation failed',
+        message: 'Falha na validação',
         errors: errors.array()
       });
     }
@@ -35,13 +35,13 @@ router.post('/submit', [
     });
 
     res.status(200).json({
-      message: 'Contact form submitted successfully. We will get back to you within 24 hours.',
+      message: 'Mensagem enviada com sucesso. Retornaremos em até 24 horas.',
       success: true
     });
 
   } catch (error) {
     res.status(500).json({
-      message: 'Internal server error. Please try again later.',
+      message: 'Erro interno do servidor. Tente novamente mais tarde.',
       success: false
     });
   }
@@ -49,11 +49,11 @@ router.post('/submit', [
 
 // Submit career application
 router.post('/career-application', [
-  body('firstName').trim().isLength({ min: 1 }).withMessage('First name is required'),
-  body('lastName').trim().isLength({ min: 1 }).withMessage('Last name is required'),
-  body('email').isEmail().withMessage('Valid email is required'),
-  body('jobTitle').trim().isLength({ min: 1 }).withMessage('Job title is required'),
-  body('jobId').trim().isLength({ min: 1 }).withMessage('Job ID is required'),
+  body('firstName').trim().isLength({ min: 1 }).withMessage('O nome é obrigatório'),
+  body('lastName').trim().isLength({ min: 1 }).withMessage('O sobrenome é obrigatório'),
+  body('email').isEmail().withMessage('Informe um e-mail válido'),
+  body('jobTitle').trim().isLength({ min: 1 }).withMessage('O cargo é obrigatório'),
+  body('jobId').trim().isLength({ min: 1 }).withMessage('O ID da vaga é obrigatório'),
   body('phone').optional().trim(),
   body('location').optional().trim(),
   body('coverLetter').optional().trim(),
@@ -64,7 +64,7 @@ router.post('/career-application', [
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        message: 'Validation failed',
+        message: 'Falha na validação',
         errors: errors.array()
       });
     }
@@ -97,13 +97,13 @@ router.post('/career-application', [
     });
 
     res.status(200).json({
-      message: 'Application submitted successfully. We will review your application and get back to you soon.',
+      message: 'Candidatura enviada com sucesso. Vamos analisá-la e retornaremos em breve.',
       success: true
     });
 
   } catch (error) {
     res.status(500).json({
-      message: 'Internal server error. Please try again later.',
+      message: 'Erro interno do servidor. Tente novamente mais tarde.',
       success: false
     });
   }
@@ -111,11 +111,11 @@ router.post('/career-application', [
 
 // Submit demo scheduling request
 router.post('/schedule-demo', [
-  body('name').trim().isLength({ min: 1 }).withMessage('Name is required'),
-  body('email').isEmail().withMessage('Valid email is required'),
-  body('teamSize').trim().isLength({ min: 1 }).withMessage('Team size is required'),
-  body('slotDate').trim().isLength({ min: 1 }).withMessage('Demo date is required'),
-  body('slotTime').trim().isLength({ min: 1 }).withMessage('Demo time is required'),
+  body('name').trim().isLength({ min: 1 }).withMessage('O nome é obrigatório'),
+  body('email').isEmail().withMessage('Informe um e-mail válido'),
+  body('teamSize').trim().isLength({ min: 1 }).withMessage('O tamanho da equipe é obrigatório'),
+  body('slotDate').trim().isLength({ min: 1 }).withMessage('A data da demonstração é obrigatória'),
+  body('slotTime').trim().isLength({ min: 1 }).withMessage('O horário da demonstração é obrigatório'),
   body('company').optional().trim(),
   body('interests').optional().isArray(),
   body('questions').optional().trim(),
@@ -124,7 +124,7 @@ router.post('/schedule-demo', [
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        message: 'Validation failed',
+        message: 'Falha na validação',
         errors: errors.array()
       });
     }
@@ -153,13 +153,13 @@ router.post('/schedule-demo', [
     });
 
     res.status(200).json({
-      message: 'Demo scheduled successfully. You will receive a confirmation email shortly.',
+      message: 'Demonstração agendada com sucesso. Você receberá um e-mail de confirmação em breve.',
       success: true
     });
 
   } catch (error) {
     res.status(500).json({
-      message: 'Internal server error. Please try again later.',
+      message: 'Erro interno do servidor. Tente novamente mais tarde.',
       success: false
     });
   }

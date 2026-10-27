@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 export const getUserNotifications = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     // Get query parameters
@@ -54,7 +54,7 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error retrieving notifications', 
+      message: 'Erro ao carregar as notificações', 
       error: (error as Error).message 
     });
   }
@@ -64,14 +64,14 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
 export const getNotificationById = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const notificationId = req.params.id;
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-      return res.status(400).json({ message: 'Invalid notification ID' });
+      return res.status(400).json({ message: 'ID de notificação inválido' });
     }
 
     const notification = await Notification.findOne({ 
@@ -80,7 +80,7 @@ export const getNotificationById = async (req: AuthRequest, res: Response) => {
     });
 
     if (!notification) {
-      return res.status(404).json({ message: 'Notification not found' });
+      return res.status(404).json({ message: 'Notificação não encontrada' });
     }
 
     res.json({
@@ -90,7 +90,7 @@ export const getNotificationById = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error retrieving notification', 
+      message: 'Erro ao carregar a notificação', 
       error: (error as Error).message 
     });
   }
@@ -100,14 +100,14 @@ export const getNotificationById = async (req: AuthRequest, res: Response) => {
 export const markNotificationAsRead = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const notificationId = req.params.id;
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-      return res.status(400).json({ message: 'Invalid notification ID' });
+      return res.status(400).json({ message: 'ID de notificação inválido' });
     }
 
     const notification = await Notification.findOneAndUpdate(
@@ -120,7 +120,7 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
     );
 
     if (!notification) {
-      return res.status(404).json({ message: 'Notification not found' });
+      return res.status(404).json({ message: 'Notificação não encontrada' });
     }
 
     res.json({
@@ -130,7 +130,7 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error marking notification as read', 
+      message: 'Erro ao marcar a notificação como lida', 
       error: (error as Error).message 
     });
   }
@@ -140,7 +140,7 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
 export const markAllNotificationsAsRead = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const result = await Notification.updateMany(
@@ -158,7 +158,7 @@ export const markAllNotificationsAsRead = async (req: AuthRequest, res: Response
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error marking all notifications as read', 
+      message: 'Erro ao marcar todas as notificações como lidas', 
       error: (error as Error).message 
     });
   }
@@ -168,14 +168,14 @@ export const markAllNotificationsAsRead = async (req: AuthRequest, res: Response
 export const deleteNotification = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const notificationId = req.params.id;
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-      return res.status(400).json({ message: 'Invalid notification ID' });
+      return res.status(400).json({ message: 'ID de notificação inválido' });
     }
 
     const notification = await Notification.findOneAndDelete({
@@ -184,17 +184,17 @@ export const deleteNotification = async (req: AuthRequest, res: Response) => {
     });
 
     if (!notification) {
-      return res.status(404).json({ message: 'Notification not found' });
+      return res.status(404).json({ message: 'Notificação não encontrada' });
     }
 
     res.json({
       success: true,
-      message: 'Notification deleted successfully'
+      message: 'Notificação excluída com sucesso'
     });
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error deleting notification', 
+      message: 'Erro ao excluir a notificação', 
       error: (error as Error).message 
     });
   }
@@ -204,7 +204,7 @@ export const deleteNotification = async (req: AuthRequest, res: Response) => {
 export const deleteAllNotifications = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Não autorizado' });
     }
 
     const result = await Notification.deleteMany({ userId: req.user.id });
@@ -216,7 +216,7 @@ export const deleteAllNotifications = async (req: AuthRequest, res: Response) =>
   } catch (error) {
     res.status(500).json({ 
       success: false,
-      message: 'Error deleting all notifications', 
+      message: 'Erro ao excluir todas as notificações', 
       error: (error as Error).message 
     });
   }

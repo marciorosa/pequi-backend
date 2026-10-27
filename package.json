@@ -1,7 +1,7 @@
 {
   "name": "ai_lawyer_backend",
   "version": "1.0.0",
-  "description": "AIForLawyers Backend API",
+  "description": "Pequi Backend API",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",

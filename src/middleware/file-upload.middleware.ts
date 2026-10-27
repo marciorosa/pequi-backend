@@ -18,7 +18,7 @@ const upload = multer({
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, GIF and PDF files are allowed.'));
+      cb(new Error('Tipo de arquivo inválido. Somente arquivos JPEG, PNG, GIF, WEBP e PDF são permitidos.'));
     }
   }
 });
