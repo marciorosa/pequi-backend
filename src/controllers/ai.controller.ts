@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../types';
 import geminiService from '../services/gemini.service';
+import User from '../models/user.model';
 
 // Generate AI assistant response
 export const generateAssistantResponse = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -161,6 +162,17 @@ export const chatWithAssistant = async (req: Request, res: Response): Promise<vo
                            response.includes("Desculpe, ocorreu um problema técnico") ||
                            response.includes("Desculpe, estou com dificuldade para processar sua solicitação");
     
+    // Uma resposta que falhou não deve consumir a cota de conversas do usuário
+    if (isErrorResponse) {
+      const userId = (req as any).user?.id;
+      if (userId) {
+        await User.updateOne(
+          { _id: userId, 'apiUsage.chatCount': { $gt: 0 } },
+          { $inc: { 'apiUsage.chatCount': -1 } }
+        ).catch(() => undefined);
+      }
+    }
+
     // If it's an error message, still return 200 with the friendly message for the user to see
     res.status(200).json({
       text: response, // Keep 'text' for backward compatibility

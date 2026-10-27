@@ -59,7 +59,11 @@ export const checkFeatureLimit = (feature: FeatureType, increment: boolean = tru
                 }
             }
 
-            const limit = PLAN_LIMITS[planTier][feature];
+            // A conta do administrador (ADMIN_EMAIL) não tem limites, para testes e suporte
+            const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+            const isAdmin = Boolean(adminEmail) && (user.email || '').trim().toLowerCase() === adminEmail;
+
+            const limit = isAdmin ? Infinity : PLAN_LIMITS[planTier][feature];
             const currentUsage = user.apiUsage ? user.apiUsage[feature] : 0;
 
             if (currentUsage >= (limit as number)) {
