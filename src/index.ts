@@ -157,8 +157,17 @@ app.get('/health', (req: Request, res: Response) => {
 
 // Diagnóstico da IA: testa a chave e o modelo do Gemini com uma chamada mínima
 app.get('/health/ai', async (req: Request, res: Response) => {
-  const { checkGemini } = await import('./services/gemini.service');
-  const result = await checkGemini();
+  // /health/ai                    -> Gemini (chamada mínima)
+  // /health/ai?mode=chat          -> Gemini pelo mesmo caminho do chat
+  // /health/ai?provider=maritaca  -> Maritaca
+  let result: { ok: boolean };
+  if (req.query.provider === 'maritaca') {
+    const { checkMaritaca } = await import('./services/maritaca.service');
+    result = await checkMaritaca();
+  } else {
+    const { checkGemini } = await import('./services/gemini.service');
+    result = await checkGemini(req.query.mode === 'chat' ? 'chat' : 'basic');
+  }
   res.status(result.ok ? 200 : 503).json({ ...result, timestamp: new Date().toISOString() });
 });
 

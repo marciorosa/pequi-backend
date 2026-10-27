@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Content, Part, InlineDataPart } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import dotenv from 'dotenv';
+import { maritacaChat, isMaritacaConfigured, MARITACA_MODEL } from './maritaca.service';
 import fs from 'fs';
 import path from 'path';
 
@@ -47,6 +48,9 @@ const safetySettings = [
 // O gemini-2.0-flash foi desligado em 01/06/2026 e o gemini-2.5-flash não está mais
 // disponível para chaves novas; o Google indica o gemini-3.8-flash.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+
+// Provedor das mensagens do chat: "maritaca" (padrão, com Gemini de reserva) ou "gemini"
+const CHAT_PROVIDER = (process.env.AI_PROVIDER || 'maritaca').toLowerCase();
 
 // Os modelos Gemini 2.5+ "pensam" antes de responder e esses tokens contam no
 // limite maxOutputTokens. Reduzimos o raciocínio ao mínimo para respostas rápidas
@@ -516,6 +520,21 @@ export const generateChatResponse = async (
     chatHistory?: Array<{ role: string, content: string }>
   }
 ): Promise<string> => {
+  // Mensagens de texto vão primeiro para a Maritaca (padrão). Arquivos (PDF/imagem)
+  // e qualquer falha da Maritaca seguem para o Gemini, que funciona como reserva.
+  if (CHAT_PROVIDER === 'maritaca' && isMaritacaConfigured() && !options.context?.inlineData) {
+    try {
+      const text = await maritacaChat(prompt, {
+        languageLevel: options.languageLevel,
+        useWebSearch: options.useWebSearch,
+        chatHistory: options.chatHistory,
+      });
+      return formatResponseToHTML(text);
+    } catch (maritacaError: any) {
+      console.error(`[maritaca] Falha (modelo ${MARITACA_MODEL}), usando o Gemini como reserva:`, maritacaError?.message || maritacaError);
+    }
+  }
+
   try {
     // Prepare chat history
     const history: Array<Content> = [];
@@ -524,7 +543,10 @@ export const generateChatResponse = async (
       try {
         // Gemini requires first message to be from 'user'
         // First, properly map roles to Gemini expected format
-        const mappedHistory = options.chatHistory.map(msg => ({
+        const mappedHistory = options.chatHistory
+          // Mensagens vazias fazem a API recusar a requisição inteira
+          .filter(msg => typeof msg?.content === 'string' && msg.content.trim() !== '')
+          .map(msg => ({
           role: msg.role === 'user' ? 'user' : 'model', // Gemini expects 'model', not 'assistant'
           content: msg.content || '',
           originalRole: msg.role // Keep the original role for debugging
@@ -565,7 +587,11 @@ export const generateChatResponse = async (
           });
         }
 
-        // Log chat history for debugging
+        // O histórico precisa terminar com resposta do modelo, porque a próxima
+        // mensagem enviada já é do usuário (sobra de tentativas que falharam)
+        while (history.length > 0 && history[history.length - 1].role === 'user') {
+          history.pop();
+        }
       } catch (historyError) {
         // Continue without history if there's an error
       }
@@ -684,7 +710,7 @@ export const generateChatResponse = async (
       result = await Promise.race([
         chat.sendMessage(parts),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Gemini API timeout after 30 seconds')), 30000)
+          setTimeout(() => reject(new Error('Gemini API timeout after 50 seconds')), 50000)
         )
       ]) as any;
 
@@ -940,12 +966,25 @@ export default {
  * Diagnóstico: faz uma chamada mínima ao Gemini e informa se a chave/modelo funcionam.
  * Nunca expõe a chave; devolve só o status e a mensagem de erro da API.
  */
-export const checkGemini = async (): Promise<{ ok: boolean; model: string; keyConfigured: boolean; reply?: string; error?: string; status?: number }> => {
+export const checkGemini = async (mode: 'basic' | 'chat' = 'basic'): Promise<{ ok: boolean; model: string; keyConfigured: boolean; reply?: string; error?: string; status?: number }> => {
   const keyConfigured = Boolean(apiKey);
   if (!keyConfigured) {
     return { ok: false, model: GEMINI_MODEL, keyConfigured, error: 'GEMINI_API_KEY não definida' };
   }
   try {
+    if (mode === 'chat') {
+      // Mesmo caminho do chat do painel: model com safetySettings, startChat com histórico e mesma configuração
+      const chat = model.startChat({
+        history: [
+          { role: 'user', parts: [{ text: 'Olá' }] },
+          { role: 'model', parts: [{ text: 'Olá! Como posso ajudar?' }] },
+        ],
+        generationConfig: { ...NO_THINKING, temperature: 0.7, topP: 0.95, topK: 64, maxOutputTokens: 8192 },
+      });
+      const started = Date.now();
+      const result = await chat.sendMessage([{ text: `O que é usucapião? Responda em uma frase.\n\n${PT_BR_INSTRUCTION}` }]);
+      return { ok: true, model: GEMINI_MODEL, keyConfigured, reply: `${result.response.text().trim()} (${Date.now() - started} ms)` };
+    }
     const probe = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await probe.generateContent({
       contents: [{ role: 'user', parts: [{ text: 'Responda apenas: ok' }] }],
