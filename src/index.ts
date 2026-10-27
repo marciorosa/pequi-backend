@@ -11,7 +11,15 @@ dotenv.config();
 
 // Initialize express app
 const app = express();
-const PORT = Number(process.env.PORT);
+const PORT = Number(process.env.PORT) || 5000;
+
+// Surface startup/runtime failures in the hosting logs instead of dying silently
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal] unhandledRejection:', reason);
+});
 
 // CORS configuration
 // Production domains are always allowed, plus anything listed in FRONTEND_URL (comma-separated)
@@ -97,7 +105,11 @@ mongoose.connect(MONGO_URI, {
   minPoolSize: 2,
   retryWrites: true,
   retryReads: true,
-}).catch(() => {});
+}).then(() => {
+  console.log('[startup] MongoDB conectado');
+}).catch((err) => {
+  console.error('[startup] Falha ao conectar no MongoDB (verifique MONGO_URI):', err?.message || err);
+});
 
 // Routes
 app.get('/', (req: Request, res: Response) => {
@@ -182,6 +194,8 @@ app.use((req: Request, res: Response) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {});
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[startup] API do Pequi rodando na porta ${PORT}. Origens liberadas: ${allowedOrigins.join(', ')}`);
+});
 
 export default app;

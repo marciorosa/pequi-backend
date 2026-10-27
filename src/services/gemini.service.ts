@@ -9,12 +9,13 @@ dotenv.config();
 // Initialize the Gemini API
 const apiKey = process.env.GEMINI_API_KEY;
 
+// A missing key must not take the whole API down (login, vault, etc.); only AI calls will fail
 if (!apiKey) {
-  process.exit(1);
+  console.error('[startup] GEMINI_API_KEY não definida: os recursos de IA vão falhar até que ela seja configurada.');
 }
 
-const genAI = new GoogleGenerativeAI(apiKey);
-const fileManager = new GoogleAIFileManager(apiKey);
+const genAI = new GoogleGenerativeAI(apiKey || '');
+const fileManager = new GoogleAIFileManager(apiKey || '');
 
 // Create a system prompt that fine-tunes Gemini for legal assistance
 const legalSystemPrompt = '';

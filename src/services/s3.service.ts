@@ -2,7 +2,7 @@
 
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto'; // native UUID (uuid@13 is ESM-only and breaks require() on older Node)
 import path from 'path';
 import { ExternalServiceError } from '../utils/errors';
 
@@ -30,7 +30,7 @@ export const s3Service = {
     ): Promise<{ s3Key: string; s3Url: string }> => {
         try {
             const ext = path.extname(originalName);
-            const uniqueName = `${uuidv4()}${ext}`;
+            const uniqueName = `${randomUUID()}${ext}`;
             const s3Key = `vault/${userId}/${folderId}/${uniqueName}`;
 
             const command = new PutObjectCommand({
