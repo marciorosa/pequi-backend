@@ -43,9 +43,12 @@ const safetySettings = [
   },
 ];
 
-// Get the gemini-2.0-flash model
+// Modelo Gemini (configurável via GEMINI_MODEL).
+// O gemini-2.0-flash foi desligado pelo Google em 01/06/2026; o padrão agora é o gemini-2.5-flash.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: GEMINI_MODEL,
   safetySettings,
 });
 
@@ -676,10 +679,12 @@ export const generateChatResponse = async (
 
       return formattedResponse;
     } catch (apiError: any) {
+      console.error(`[gemini] Erro na API (modelo ${GEMINI_MODEL}):`, apiError?.status || '', apiError?.message || apiError);
       // Return a friendly error message
       return "Desculpe, ocorreu um problema técnico ao gerar a resposta. Tente fazer sua pergunta novamente ou entre em contato com o suporte se o problema continuar.";
     }
   } catch (error: any) {
+    console.error('[gemini] Erro ao preparar a conversa:', error?.message || error);
     return "Desculpe, estou com dificuldade para processar sua solicitação no momento. Tente novamente mais tarde.";
   }
 };
@@ -699,9 +704,9 @@ export const analyzeDocument = async (
   prompt?: string
 ): Promise<string> => {
   try {
-    // Use gemini-2.0-flash for faster processing
+    // Modelo rápido configurado em GEMINI_MODEL
     const multimodalModel = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       safetySettings,
     });
 
@@ -797,9 +802,9 @@ export const compareDocuments = async (
   prompt: string
 ): Promise<string> => {
   try {
-    // Get the multimodal capable model (gemini-2.0-flash)
+    // Get the multimodal capable model
     const multimodalModel = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       safetySettings,
     });
 
