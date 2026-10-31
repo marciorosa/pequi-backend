@@ -5,7 +5,7 @@ import User from '../models/user.model';
 import LegalDocument from '../models/document.model';
 
 // O serviço de IA devolve estas mensagens em vez de lançar um erro
-const isAiFailureMessage = (text: string): boolean =>
+export const isAiFailureMessage = (text: string): boolean =>
   text.includes("I apologize, but I encountered a technical issue") ||
   text.includes("Sorry, I'm having trouble processing your request") ||
   text.includes("Desculpe, ocorreu um problema técnico") ||

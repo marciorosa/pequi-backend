@@ -1,3 +1,4 @@
+import { isAiFailureMessage } from './ai.controller';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
@@ -210,7 +211,8 @@ export const uploadFiles = async (req: AuthRequest, res: Response) => {
         const folderObj = folder.toObject() as any;
         delete folderObj.passwordHash;
         res.status(201).json({ files: uploaded, folder: folderObj });
-    } catch (err) {
+    } catch (err: any) {
+        console.error('[vault] Falha ao enviar os arquivos:', err?.originalError?.name || '', err?.originalError?.message || err?.message || err);
         res.status(500).json({ message: 'Falha ao enviar os arquivos' });
     }
 };
@@ -299,6 +301,11 @@ LANGUAGE: Write the entire response in Brazilian Portuguese (pt-BR).`;
             aiResponse = await generateChatResponse(message, {
                 chatHistory: conversationHistory,
             });
+        }
+
+        // Status de erro devolve a cota de conversas consumida nesta tentativa
+        if (isAiFailureMessage(aiResponse)) {
+            return res.status(503).json({ message: aiResponse });
         }
 
         res.json({ response: aiResponse });

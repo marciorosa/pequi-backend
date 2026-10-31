@@ -148,7 +148,7 @@ app.get('/health', (req: Request, res: Response) => {
       lastError: dbStatus === 1 ? null : lastDbError
     },
     // Only reports whether each variable is set (true/false), never its value
-    config: ['MONGO_URI', 'JWT_SECRET', 'GEMINI_API_KEY', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'EMAIL_USER', 'AWS_S3_BUCKET_NAME']
+    config: ['MONGO_URI', 'JWT_SECRET', 'GEMINI_API_KEY', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'EMAIL_USER', 'AWS_S3_BUCKET_NAME', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
       .reduce((acc, key) => { acc[key] = Boolean(process.env[key]); return acc; }, {} as Record<string, boolean>),
     node: process.version,
     timestamp: new Date().toISOString()
@@ -159,6 +159,7 @@ app.get('/health', (req: Request, res: Response) => {
 app.get('/health/ai', async (req: Request, res: Response) => {
   // /health/ai                    -> Gemini (chamada mínima)
   // /health/ai?mode=chat          -> Gemini pelo mesmo caminho do chat
+  // /health/ai?fallback=1         -> Gemini com o modelo de reserva
   // /health/ai?provider=maritaca  -> Maritaca
   let result: { ok: boolean };
   if (req.query.provider === 'maritaca') {
@@ -166,8 +167,15 @@ app.get('/health/ai', async (req: Request, res: Response) => {
     result = await checkMaritaca();
   } else {
     const { checkGemini } = await import('./services/gemini.service');
-    result = await checkGemini(req.query.mode === 'chat' ? 'chat' : 'basic');
+    result = await checkGemini(req.query.mode === 'chat' ? 'chat' : 'basic', req.query.fallback === '1');
   }
+  res.status(result.ok ? 200 : 503).json({ ...result, timestamp: new Date().toISOString() });
+});
+
+// Diagnóstico do cofre: confere se a API alcança o bucket do S3. Nunca expõe chaves ou o nome do bucket.
+app.get('/health/s3', async (req: Request, res: Response) => {
+  const { s3Service } = await import('./services/s3.service');
+  const result = await s3Service.checkBucket();
   res.status(result.ok ? 200 : 503).json({ ...result, timestamp: new Date().toISOString() });
 });
 

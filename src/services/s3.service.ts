@@ -1,6 +1,6 @@
 'use strict';
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto'; // native UUID (uuid@13 is ESM-only and breaks require() on older Node)
 import path from 'path';
@@ -18,6 +18,19 @@ const s3Client = new S3Client({
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME as string;
 
 export const s3Service = {
+    /**
+     * Check that the configured bucket is reachable with the current credentials
+     */
+    checkBucket: async (): Promise<{ ok: boolean; region?: string; error?: string; status?: number }> => {
+        const region = process.env.AWS_REGION;
+        try {
+            await s3Client.send(new HeadBucketCommand({ Bucket: BUCKET_NAME }));
+            return { ok: true, region };
+        } catch (error: any) {
+            return { ok: false, region, error: error?.name || 'Erro desconhecido', status: error?.$metadata?.httpStatusCode };
+        }
+    },
+
     /**
      * Upload a file buffer to S3
      */

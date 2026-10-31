@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Content, Part, InlineDataPart } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold, Content, Part, InlineDataPart } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import dotenv from 'dotenv';
 import { maritacaChat, isMaritacaConfigured, MARITACA_MODEL } from './maritaca.service';
@@ -49,6 +49,14 @@ const safetySettings = [
 // disponível para chaves novas; o Google indica o gemini-3.8-flash.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
+// Modelo de reserva, usado quando o principal está sobrecarregado ou indisponível
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.6-flash";
+
+// A API encerra a requisição em 55 segundos: duas tentativas lentas ainda cabem nesse limite
+const GEMINI_ATTEMPT_TIMEOUT_MS = 24000;
+const GEMINI_ATTEMPT_TIMEOUT_ERROR = 'Gemini: tempo limite da tentativa esgotado';
+const GEMINI_TRANSIENT_STATUS = [404, 429, 500, 502, 503, 504];
+
 // Provedor das mensagens do chat: "maritaca" (padrão, com Gemini de reserva) ou "gemini"
 const CHAT_PROVIDER = (process.env.AI_PROVIDER || 'maritaca').toLowerCase();
 
@@ -67,6 +75,51 @@ const model = genAI.getGenerativeModel({
   safetySettings,
 });
 
+const withAttemptTimeout = async <T>(request: Promise<T>): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(GEMINI_ATTEMPT_TIMEOUT_ERROR)), GEMINI_ATTEMPT_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * Executa uma chamada ao Gemini tentando de novo no modelo principal e, se ele
+ * continuar indisponível, no modelo de reserva. Erros da própria requisição
+ * (arquivo inválido, por exemplo) não são repetidos.
+ */
+const withGeminiFallback = async <T>(run: (geminiModel: GenerativeModel) => Promise<T>): Promise<T> => {
+  const attempts = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL];
+  let lastError: any;
+
+  for (let attempt = 0; attempt < attempts.length; attempt++) {
+    const modelName = attempts[attempt];
+    try {
+      return await withAttemptTimeout(run(genAI.getGenerativeModel({ model: modelName, safetySettings })));
+    } catch (error: any) {
+      lastError = error;
+      const timedOut = error?.message === GEMINI_ATTEMPT_TIMEOUT_ERROR;
+      if (!timedOut && !GEMINI_TRANSIENT_STATUS.includes(error?.status) && error?.message !== 'fetch failed') {
+        throw error;
+      }
+      console.error(`[gemini] Falha na tentativa ${attempt + 1} (modelo ${modelName}):`, error?.status || '', error?.message || error);
+
+      if (timedOut) {
+        // Repetir um modelo que não responde estouraria o limite da requisição
+        attempt = Math.max(attempt, attempts.length - 2);
+      } else if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+
+  throw lastError;
+};
+
 /**
  * Generate a legal response using Gemini AI
  * @param prompt User's legal question or request
@@ -75,18 +128,6 @@ const model = genAI.getGenerativeModel({
  */
 export const generateLegalResponse = async (prompt: string, context?: any): Promise<string> => {
   try {
-    // Create a chat session with no system prompting
-    const chat = model.startChat({
-      history: [],
-      generationConfig: {
-        ...NO_THINKING,
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 64,
-        maxOutputTokens: 8192,
-      },
-    });
-
     // Prepare the prompt with context if available
     let fullPrompt = prompt;
     if (context) {
@@ -101,7 +142,19 @@ export const generateLegalResponse = async (prompt: string, context?: any): Prom
     fullPrompt += `\n\n${PT_BR_INSTRUCTION}`;
 
     // Generate response
-    const result = await chat.sendMessage(fullPrompt);
+    const result = await withGeminiFallback((geminiModel) =>
+      // Create a chat session with no system prompting
+      geminiModel.startChat({
+        history: [],
+        generationConfig: {
+          ...NO_THINKING,
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 64,
+          maxOutputTokens: 8192,
+        },
+      }).sendMessage(fullPrompt)
+    );
     const response = result.response;
     return response.text();
   } catch (error) {
@@ -185,10 +238,10 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
       maxOutputTokens: 2048, // Shorter to encourage conciseness
     };
 
-    const result = await model.generateContent({
+    const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent({
       contents: [{ role: "user", parts: [{ text: searchEnhancementPrompt }] }],
       generationConfig,
-    });
+    }));
 
     const response = result.response;
     const responseText = response.text();
@@ -599,33 +652,6 @@ export const generateChatResponse = async (
       }
     }
 
-    // Create a chat session with history
-    // Only use history if it's properly formatted
-    let chat;
-    try {
-      chat = model.startChat({
-        history: history.length > 0 ? history : undefined,
-        generationConfig: {
-          ...NO_THINKING,
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 64,
-          maxOutputTokens: 8192,
-        },
-      });
-    } catch (chatError) {
-      // Fallback to starting chat without history
-      chat = model.startChat({
-        generationConfig: {
-          ...NO_THINKING,
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 64,
-          maxOutputTokens: 8192,
-        },
-      });
-    }
-
     // Prepare parts for the message
     const parts: Part[] = [];
 
@@ -710,7 +736,20 @@ export const generateChatResponse = async (
     let result;
     try {
       result = await Promise.race([
-        chat.sendMessage(parts),
+        withGeminiFallback((geminiModel) =>
+          // Create a chat session with history
+          // Only use history if it's properly formatted
+          geminiModel.startChat({
+            history: history.length > 0 ? history : undefined,
+            generationConfig: {
+              ...NO_THINKING,
+              temperature: 0.7,
+              topP: 0.95,
+              topK: 64,
+              maxOutputTokens: 8192,
+            },
+          }).sendMessage(parts)
+        ),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Gemini API timeout after 50 seconds')), 50000)
         )
@@ -748,12 +787,6 @@ export const analyzeDocument = async (
   prompt?: string
 ): Promise<string> => {
   try {
-    // Modelo rápido configurado em GEMINI_MODEL
-    const multimodalModel = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      safetySettings,
-    });
-
     // Prepare the base prompt based on file type
     let analysisPrompt = prompt || '';
     if (!analysisPrompt) {
@@ -797,14 +830,8 @@ export const analyzeDocument = async (
       { text: `${analysisPrompt}\n\n${PT_BR_INSTRUCTION}` }
     ];
 
-    // Set a timeout for the API call
-    const timeout = 30000; // 30 seconds
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Document analysis timed out')), timeout);
-    });
-
     // Generate content with the file and prompt
-    const resultPromise = multimodalModel.generateContent({
+    const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent({
       contents: [{ role: "user", parts: messageParts }],
       generationConfig: {
         ...NO_THINKING,
@@ -813,17 +840,14 @@ export const analyzeDocument = async (
         topK: 40,
         maxOutputTokens: 8192,
       },
-    });
-
-    // Race between the API call and the timeout
-    const result = await Promise.race([resultPromise, timeoutPromise]) as { response: { text: () => string } };
+    }));
     const response = result.response;
     const analysisText = response.text();
 
     // Process the response for better formatting
     return formatResponseToHTML(analysisText);
   } catch (error: any) {
-    if (error.message === 'Document analysis timed out') {
+    if (error.message === GEMINI_ATTEMPT_TIMEOUT_ERROR) {
       throw new Error('A análise do documento demorou demais. Tente com um documento menor ou entre em contato com o suporte.');
     }
     throw new Error('Falha ao analisar o documento: ' + error.message);
@@ -847,12 +871,6 @@ export const compareDocuments = async (
   prompt: string
 ): Promise<string> => {
   try {
-    // Get the multimodal capable model
-    const multimodalModel = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      safetySettings,
-    });
-
     // Create the message parts with the inline data and prompt
     const messageParts: Part[] = [
       {
@@ -871,7 +889,7 @@ export const compareDocuments = async (
     ];
 
     // Generate content with both files and the comparison prompt
-    const result = await multimodalModel.generateContent({
+    const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent({
       contents: [{ role: "user", parts: messageParts }],
       generationConfig: {
         ...NO_THINKING,
@@ -880,7 +898,7 @@ export const compareDocuments = async (
         topK: 40,
         maxOutputTokens: 8192, // More tokens for detailed comparison
       },
-    });
+    }));
 
     const response = result.response;
     const comparisonText = response.text();
@@ -968,7 +986,8 @@ export default {
  * Diagnóstico: faz uma chamada mínima ao Gemini e informa se a chave/modelo funcionam.
  * Nunca expõe a chave; devolve só o status e a mensagem de erro da API.
  */
-export const checkGemini = async (mode: 'basic' | 'chat' = 'basic'): Promise<{ ok: boolean; model: string; keyConfigured: boolean; reply?: string; error?: string; status?: number }> => {
+export const checkGemini = async (mode: 'basic' | 'chat' = 'basic', useFallback: boolean = false): Promise<{ ok: boolean; model: string; keyConfigured: boolean; reply?: string; error?: string; status?: number }> => {
+  const probeModel = useFallback ? GEMINI_FALLBACK_MODEL : GEMINI_MODEL;
   const keyConfigured = Boolean(apiKey);
   if (!keyConfigured) {
     return { ok: false, model: GEMINI_MODEL, keyConfigured, error: 'GEMINI_API_KEY não definida' };
@@ -987,16 +1006,16 @@ export const checkGemini = async (mode: 'basic' | 'chat' = 'basic'): Promise<{ o
       const result = await chat.sendMessage([{ text: `O que é usucapião? Responda em uma frase.\n\n${PT_BR_INSTRUCTION}` }]);
       return { ok: true, model: GEMINI_MODEL, keyConfigured, reply: `${result.response.text().trim()} (${Date.now() - started} ms)` };
     }
-    const probe = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const probe = genAI.getGenerativeModel({ model: probeModel });
     const result = await probe.generateContent({
       contents: [{ role: 'user', parts: [{ text: 'Responda apenas: ok' }] }],
       generationConfig: { ...NO_THINKING, maxOutputTokens: 512 },
     });
-    return { ok: true, model: GEMINI_MODEL, keyConfigured, reply: result.response.text().trim() };
+    return { ok: true, model: probeModel, keyConfigured, reply: result.response.text().trim() };
   } catch (err: any) {
     return {
       ok: false,
-      model: GEMINI_MODEL,
+      model: probeModel,
       keyConfigured,
       status: err?.status,
       error: String(err?.message || err).replace(apiKey || '__no_key__', '***'),
