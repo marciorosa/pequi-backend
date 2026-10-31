@@ -2,6 +2,17 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../types';
 import geminiService from '../services/gemini.service';
 import User from '../models/user.model';
+import LegalDocument from '../models/document.model';
+
+// O serviço de IA devolve estas mensagens em vez de lançar um erro
+const isAiFailureMessage = (text: string): boolean =>
+  text.includes("I apologize, but I encountered a technical issue") ||
+  text.includes("Sorry, I'm having trouble processing your request") ||
+  text.includes("Desculpe, ocorreu um problema técnico") ||
+  text.includes("Desculpe, estou com dificuldade para processar sua solicitação");
+
+// Numeração única do CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO
+const CNJ_PROCESS_NUMBER = /\b\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}\b/;
 
 // Generate AI assistant response
 export const generateAssistantResponse = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -90,50 +101,24 @@ export const searchLegalDatabase = async (req: AuthRequest, res: Response): Prom
       res.status(400).json({ message: 'O termo de pesquisa é obrigatório' });
       return;
     }
-    
+
+    if (CNJ_PROCESS_NUMBER.test(query)) {
+      res.status(422).json({ message: 'A consulta de processos pelo número ainda não está disponível. Pesquise por um tema, direito ou cláusula.' });
+      return;
+    }
+
     const enhancedSearch = await geminiService.aiEnhancedLegalSearch(query, filters);
     
     // Process the enhanced query to preserve formatting while removing markdown
     const processedEnhancedQuery = enhancedSearch.enhancedQuery;
-    
-    // In a real application, you would use the enhanced query to search your database
-    // Mock search results with better formatting
-    const searchResults = [
-      {
-        id: "case-001",
-        title: "Smith v. Johnson",
-        type: "Jurisprudência",
-        year: 2020,
-        relevance: 0.95,
-        summary: "Caso paradigmático que estabeleceu precedente para a interpretação de contratos por IA.",
-        formattedContent: "Neste caso decisivo, o tribunal decidiu que interpretações contratuais geradas por IA podem ser admitidas como prova quando certos critérios de confiabilidade são atendidos."
-      },
-      {
-        id: "reg-042",
-        title: "Regulamento de Proteção de Dados 42",
-        type: "Regulamento",
-        year: 2022,
-        relevance: 0.87,
-        summary: "Regulamento que disciplina o uso de IA em processos judiciais.",
-        formattedContent: "Seção 3.1: sistemas de IA usados em processos judiciais devem manter trilha de auditoria de todas as decisões e oferecer mecanismos de explicabilidade."
-      },
-      {
-        id: "article-103",
-        title: "Ética da IA na Prática Jurídica",
-        type: "Artigo",
-        year: 2023,
-        relevance: 0.82,
-        summary: "Artigo acadêmico sobre considerações éticas da IA no Direito.",
-        formattedContent: "O artigo explora três áreas principais: mitigação de vieses, requisitos de transparência e manutenção da supervisão humana em aplicações jurídicas de IA de alto impacto."
-      }
-    ];
     
     res.json({
       success: true,
       query,
       enhancedQuery: processedEnhancedQuery,
       followUpPrompts: enhancedSearch.followUpPrompts || [],
-      results: searchResults
+      // A pesquisa ainda não consulta bases de processos ou jurisprudência
+      results: []
     });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao pesquisar a base jurídica', error: (error as Error).message });
@@ -157,10 +142,7 @@ export const chatWithAssistant = async (req: Request, res: Response): Promise<vo
     });
     
     // Check if response appears to be an error message (service now returns user-friendly errors)
-    const isErrorResponse = response.includes("I apologize, but I encountered a technical issue") || 
-                           response.includes("Sorry, I'm having trouble processing your request") ||
-                           response.includes("Desculpe, ocorreu um problema técnico") ||
-                           response.includes("Desculpe, estou com dificuldade para processar sua solicitação");
+    const isErrorResponse = isAiFailureMessage(response);
     
     // Uma resposta que falhou não deve consumir a cota de conversas do usuário
     if (isErrorResponse) {
@@ -455,10 +437,22 @@ export const createAgreement = async (req: AuthRequest, res: Response) => {
     
     // Process the response to ensure proper formatting
     const formattedAgreement = await geminiService.generateChatResponse(agreementResult, {});
-    
+
+    if (isAiFailureMessage(formattedAgreement)) {
+      throw new Error('Falha ao gerar o contrato com o modelo de IA');
+    }
+
+    const savedAgreement = await LegalDocument.create({
+      userId: req.user?.id,
+      title,
+      content: formattedAgreement,
+      documentType: 'Contrato'
+    });
+
     // Return the formatted agreement
     res.json({
       success: true,
+      id: savedAgreement.id,
       title: title,
       text: formattedAgreement
     });
@@ -528,7 +522,7 @@ export const translateDocument = async (req: AuthRequest, res: Response) => {
 // Create an advanced document with specific template and style
 export const createDocument = async (req: AuthRequest, res: Response) => {
   try {
-    const { documentType, templateStyle, specialRequirements, referenceDocumentText } = req.body;
+    const { documentType, templateStyle, specialRequirements, referenceDocumentText, referenceDocumentFile } = req.body;
     
     if (!documentType || !templateStyle) {
       return res.status(400).json({ message: 'O tipo de documento e o estilo do modelo são obrigatórios' });
@@ -541,8 +535,17 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       prompt += ` Include the following special requirements: ${specialRequirements}.`;
     }
     
-    if (referenceDocumentText) {
-      prompt += ` Reference document for style and terminology: ${referenceDocumentText.substring(0, 1000)}...`;
+    const referenceText = referenceDocumentFile?.data
+      ? await geminiService.analyzeDocument(
+          referenceDocumentFile.data,
+          referenceDocumentFile.mimeType || 'application/pdf',
+          undefined,
+          'Transcribe the text of this document, without any comments.'
+        )
+      : referenceDocumentText;
+
+    if (referenceText) {
+      prompt += ` Reference document for style and terminology: ${referenceText.substring(0, 1000)}...`;
     }
     
     // Add template style-specific instructions
@@ -616,16 +619,27 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     // Call the Gemini service for document creation
     const documentContent = await geminiService.generateLegalResponse(prompt);
     
+    const title = `${documentType} - ${templateStyle}`;
+    const savedDocument = await LegalDocument.create({
+      userId: req.user?.id,
+      title,
+      content: documentContent,
+      documentType,
+      templateStyle
+    });
+
     // Return the generated document
     res.json({
       success: true,
+      id: savedDocument.id,
+      title,
       content: documentContent,
       documentType,
       templateStyle
     });
   } catch (error) {
-    res.status(500).json({ 
-      message: 'Error creating document', 
+    res.status(500).json({
+      message: 'Erro ao criar o documento',
       error: (error as Error).message 
     });
   }

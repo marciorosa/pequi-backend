@@ -91,6 +91,16 @@ export const checkFeatureLimit = (feature: FeatureType, increment: boolean = tru
                 await User.findByIdAndUpdate(userId, {
                     $inc: { [`apiUsage.${feature}`]: 1 }
                 });
+
+                // Uma operação que terminou em erro não deve consumir a cota do usuário
+                res.on('finish', () => {
+                    if (res.statusCode >= 400) {
+                        User.updateOne(
+                            { _id: userId, [`apiUsage.${feature}`]: { $gt: 0 } },
+                            { $inc: { [`apiUsage.${feature}`]: -1 } }
+                        ).catch(() => undefined);
+                    }
+                });
             }
 
             next();

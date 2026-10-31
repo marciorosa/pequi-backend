@@ -171,6 +171,8 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
     
     FORMATTING INSTRUCTION: DO NOT use any markdown syntax (no stars/asterisks, no hashes, no underscores) in your response.
 
+    ACCURACY INSTRUCTION: You have no access to court records or case-law databases. Never invent case numbers, parties, rulings or citations. Cite only laws and legal principles you are sure exist.
+
     ${PT_BR_INSTRUCTION}
     `;
 

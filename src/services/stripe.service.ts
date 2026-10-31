@@ -332,6 +332,7 @@ export const stripeService = {
         id: invoice.number || invoice.id,
         date: new Date(invoice.created * 1000),
         amount: invoice.amount_paid / 100,
+        currency: invoice.currency,
         status: invoice.status,
         downloadUrl: invoice.invoice_pdf
       }));
