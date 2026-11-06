@@ -22,7 +22,9 @@ const fileManager = new GoogleAIFileManager(apiKey || '');
 const legalSystemPrompt = '';
 
 // Response language for Brazilian users
-const PT_BR_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).';
+const PT_BR_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).'
+  // Regras pedidas no relatório da OAB: a IA não se apresenta como advogado nem presta consultoria
+  + ' ROLE: You are an artificial intelligence tool that provides general legal information based on Brazilian law. You are not a lawyer and do not provide legal advice or consultancy (Lei 8.906/1994). Never present yourself as a lawyer or legal consultant, never recommend specific lawyers or law firms, and never invent laws, articles, case numbers or court decisions; if unsure, say so. When answering a legal question, briefly remind the user that a lawyer registered with the OAB or the Defensoria Pública should assess their specific case.';
 
 // Configure safety settings
 const safetySettings = [
@@ -207,9 +209,9 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
     ${query}
     ${filters ? `\nFilters: ${JSON.stringify(filters)}` : ''}
     
-    You are a world-class legal expert with comprehensive knowledge of global legal systems, principles, and precedents. Your expertise spans common law, civil law, international law, and specialized legal domains.
+    You are an AI legal information tool focused on Brazilian law (Constituição Federal, códigos, leis federais, súmulas). You are not a lawyer and this is informational content, not legal advice.
     
-    Provide a concise, authoritative analysis of this legal query in exactly this format:
+    Provide a concise, informative explanation of this legal query in exactly this format:
     
     1. Start with a clear title (3-6 words) that captures the key legal concept. Do NOT use asterisks or stars.
     
@@ -806,10 +808,10 @@ export const analyzeDocument = async (
         'corporate': 'Focus on business law aspects, including corporate governance, contracts, and compliance.',
         'real-estate': 'Focus on property law, including titles, leases, and zoning issues.',
         'intellectual-property': 'Focus on IP rights, including patents, trademarks, and copyrights.',
-        'immigration': 'Focus on immigration law matters, including visas, citizenship, and deportation issues.',
+        'immigration': 'Focus on Brazilian migration law (Lei 13.445/2017), including visas, residence permits, naturalization and refugee status.',
         'tax': 'Focus on tax law aspects, including deductions, credits, and compliance.',
-        'employment': 'Focus on labor law, including employment contracts, discrimination, and workplace rights.',
-        'healthcare': 'Focus on healthcare law, including HIPAA compliance, medical malpractice, and healthcare regulations.',
+        'employment': 'Focus on Brazilian labor law (CLT), including employment contracts, severance, discrimination and workplace rights.',
+        'healthcare': 'Focus on Brazilian health law, including health plan coverage (ANS rules), patient rights, medical malpractice and sensitive health data under the LGPD.',
         'cybersecurity': 'Focus on data security issues, privacy concerns, and compliance with regulations.',
         'entertainment': 'Focus on contract terms, IP rights, royalty structures, and entertainment law matters.',
       };

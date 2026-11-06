@@ -1,39 +1,37 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import User from '../models/user.model';
-import Subscription from '../models/subscription.model';
-import { AppError } from '../utils/errors';
+import {
+    FeatureType,
+    PLAN_LIMITS,
+    resolvePlan,
+    getLimit,
+    getUsage,
+    canUseLawyer,
+    ensureUsageCycle,
+} from '../config/plans';
 
-export type FeatureType = 'searchCount' | 'chatCount' | 'docsCount' | 'vaultFolderCount' | 'workflowCount';
+export type { FeatureType };
+export { PLAN_LIMITS };
 
-// Define the absolute limits for each plan over a billing cycle
-export const PLAN_LIMITS = {
-    free: {
-        searchCount: 5,
-        chatCount: 5,
-        docsCount: 0,
-        vaultFolderCount: 0,
-        workflowCount: 0,
-    },
-    pro: {
-        searchCount: 50,
-        chatCount: 50,
-        docsCount: 50,
-        vaultFolderCount: 50,
-        workflowCount: 5,
-    },
-    enterprise: {
-        searchCount: Infinity,
-        chatCount: Infinity,
-        docsCount: Infinity,
-        vaultFolderCount: Infinity,
-        workflowCount: Infinity,
-    }
+const featureNames: Record<FeatureType, string> = {
+    searchCount: 'pesquisas',
+    chatCount: 'mensagens de chat',
+    docsCount: 'operações com documentos',
+    vaultFolderCount: 'pastas do cofre',
+    workflowCount: 'fluxos de trabalho',
 };
 
+// Recursos contados pelo que existe no banco (não por contador), para não divergir da tela
+const COUNTED_FROM_DB: FeatureType[] = ['vaultFolderCount', 'workflowCount'];
+
+const upgradeRequired = (res: Response, message: string) =>
+    res.status(403).json({ message, code: 'UPGRADE_REQUIRED' });
+
 /**
- * Middleware to check if a user has exceeded their plan's limit for a given feature.
- * Automatically increments the count if they pass the check (and increment is true).
+ * Verifica no servidor se o usuário ainda tem cota do recurso no plano dele.
+ * Se tiver, soma 1 ao contador (pesquisas, mensagens e documentos) e devolve a
+ * unidade caso a operação termine em erro.
  */
 export const checkFeatureLimit = (feature: FeatureType, increment: boolean = true) => {
     return async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -48,64 +46,80 @@ export const checkFeatureLimit = (feature: FeatureType, increment: boolean = tru
                 return res.status(404).json({ message: 'Usuário não encontrado' });
             }
 
-            let planTier: 'free' | 'pro' | 'enterprise' = 'free';
+            const plan = await resolvePlan(user);
+            await ensureUsageCycle(user, plan);
+            const limit = getLimit(plan, feature);
 
-            if (user.subscriptionId) {
-                const sub = await Subscription.findById(user.subscriptionId);
-                if (sub && sub.status === 'active') {
-                    planTier = 'pro';
-                    // NOTE: If you add Enterprise natively to stripe in the future, 
-                    // you would conditionally set planTier='enterprise' depending on the price ID.
+            if (limit === 0) {
+                return upgradeRequired(res, 'Este recurso não está incluído no seu plano atual. Faça upgrade para o Pro para ter acesso.');
+            }
+
+            if (!increment) {
+                return next();
+            }
+
+            if (COUNTED_FROM_DB.includes(feature)) {
+                const usage = await getUsage(user);
+                if (usage[feature] >= limit) {
+                    return upgradeRequired(res, `Você atingiu o limite de ${featureNames[feature]} do seu plano.`);
                 }
+                return next();
             }
 
-            // A conta do administrador (ADMIN_EMAIL) não tem limites, para testes e suporte
-            const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-            const isAdmin = Boolean(adminEmail) && (user.email || '').trim().toLowerCase() === adminEmail;
+            // Soma 1 só se o uso atual ainda estiver abaixo do limite (operação atômica,
+            // para que requisições simultâneas não ultrapassem a cota)
+            const filter: any = { _id: userId };
+            if (Number.isFinite(limit)) {
+                filter.$or = [
+                    { [`apiUsage.${feature}`]: { $lt: limit } },
+                    { [`apiUsage.${feature}`]: { $exists: false } },
+                ];
+            }
+            const updated = await User.findOneAndUpdate(filter, { $inc: { [`apiUsage.${feature}`]: 1 } }, { new: true });
 
-            const limit = isAdmin ? Infinity : PLAN_LIMITS[planTier][feature];
-            const currentUsage = user.apiUsage ? user.apiUsage[feature] : 0;
-
-            if (currentUsage >= (limit as number)) {
-                const featureNames: Record<FeatureType, string> = {
-                    searchCount: 'pesquisas',
-                    chatCount: 'conversas',
-                    docsCount: 'documentos',
-                    vaultFolderCount: 'pastas do cofre',
-                    workflowCount: 'fluxos de trabalho',
-                };
-                const featureName = featureNames[feature] ?? (feature as string).replace('Count', '').replace(/([A-Z])/g, ' $1').toLowerCase().trim();
-                
-                const message = (limit === 0)
-                    ? `Este recurso não está incluído no seu plano atual. Faça upgrade para o Pro para ter acesso.`
-                    : `Você atingiu o limite de ${featureName} do plano ${planTier.toUpperCase()}. Faça upgrade para o Pro para continuar.`;
-
-                return res.status(403).json({
-                    message,
-                    code: 'UPGRADE_REQUIRED'
-                });
+            if (!updated) {
+                return upgradeRequired(res, `Você atingiu o limite de ${featureNames[feature]} do plano ${plan.tier === 'free' ? 'Gratuito' : 'Pro'}. Faça upgrade para continuar.`);
             }
 
-            // Automatically increment their usage counter if requested
-            if (increment) {
-                await User.findByIdAndUpdate(userId, {
-                    $inc: { [`apiUsage.${feature}`]: 1 }
-                });
-
-                // Uma operação que terminou em erro não deve consumir a cota do usuário
-                res.on('finish', () => {
-                    if (res.statusCode >= 400) {
-                        User.updateOne(
-                            { _id: userId, [`apiUsage.${feature}`]: { $gt: 0 } },
-                            { $inc: { [`apiUsage.${feature}`]: -1 } }
-                        ).catch(() => undefined);
-                    }
-                });
-            }
+            // Uma operação que terminou em erro não deve consumir a cota do usuário
+            res.on('finish', () => {
+                if (res.statusCode >= 400) {
+                    User.updateOne(
+                        { _id: userId, [`apiUsage.${feature}`]: { $gt: 0 } },
+                        { $inc: { [`apiUsage.${feature}`]: -1 } }
+                    ).catch(() => undefined);
+                }
+            });
 
             next();
         } catch (error) {
             res.status(500).json({ message: 'Falha ao verificar os limites de uso' });
         }
     };
+};
+
+/**
+ * Bloqueia no servidor os assistentes de IA que não fazem parte do plano do usuário.
+ * O site envia o identificador do assistente em context.lawyerId (chat) ou options.lawyerId (documentos).
+ * Deve vir ANTES de checkFeatureLimit, para não consumir cota quando o acesso é negado.
+ */
+export const checkLawyerAccess = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+        const lawyerId: string | undefined = req.body?.context?.lawyerId || req.body?.options?.lawyerId;
+        if (!lawyerId) return next();
+
+        const user = await User.findById(req.user?.id);
+        if (!user) {
+            return res.status(404).json({ message: 'Usuário não encontrado' });
+        }
+
+        const plan = await resolvePlan(user);
+        if (!canUseLawyer(plan, String(lawyerId))) {
+            return upgradeRequired(res, 'Este assistente não está incluído no plano Gratuito. Faça upgrade para o Pro para usá-lo.');
+        }
+
+        next();
+    } catch (error) {
+        res.status(500).json({ message: 'Falha ao verificar o acesso ao assistente' });
+    }
 };

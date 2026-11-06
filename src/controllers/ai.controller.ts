@@ -63,7 +63,7 @@ export const analyzeDocument = async (req: AuthRequest, res: Response): Promise<
     // Custom prompt based on lawyer ID if available
     let customPrompt = '';
     if (lawyerId) {
-      customPrompt = `As a specialized ${lawyerId.replace('-', ' ')} lawyer, analyze this ${fileType}. `;
+      customPrompt = `Como ferramenta de IA com foco em ${lawyerId.replace('-', ' ')} (não advogado), explique este ${fileType} em linguagem simples. `;
     }
     
     // Add formatting instructions to the prompt

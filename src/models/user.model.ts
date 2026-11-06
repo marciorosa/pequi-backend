@@ -7,6 +7,7 @@ export interface IUser extends Document {
   password: string;
   role: 'user' | 'admin';
   company?: string;
+  jobTitle?: string;
   phone?: string;
   image?: string;
   stripeCustomerId?: string;
@@ -15,6 +16,7 @@ export interface IUser extends Document {
   resetPasswordExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
+  usageCycleStart?: Date;
   apiUsage: {
     searchCount: number;
     chatCount: number;
@@ -54,6 +56,11 @@ const userSchema = new Schema<IUser>(
       type: String,
       trim: true
     },
+    // Cargo informado pelo usuário no Perfil (não confundir com role, que é a permissão da conta)
+    jobTitle: {
+      type: String,
+      trim: true
+    },
     phone: {
       type: String,
       trim: true
@@ -72,6 +79,10 @@ const userSchema = new Schema<IUser>(
       type: String
     },
     resetPasswordExpires: {
+      type: Date
+    },
+    // Início do ciclo de cobrança em que os contadores de uso foram zerados pela última vez (plano Pro)
+    usageCycleStart: {
       type: Date
     },
     apiUsage: {
