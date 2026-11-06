@@ -13,6 +13,7 @@ import emailService from '../services/email.service';
 import Subscription from '../models/subscription.model';
 import { s3Service } from '../services/s3.service';
 import { AuthError, ValidationError, NotFoundError, AppError } from '../utils/errors';
+import { resolvePlan, getUsage, limitsForJson, PLAN_FEATURES, ensureUsageCycle } from '../config/plans';
 
 dotenv.config();
 
@@ -140,22 +141,10 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
       throw new NotFoundError('Usuário');
     }
 
-    let planTier = 'Free';
-    let status = 'active';
-    let startDate = new Date();
-    let nextBillingDate: Date | null = null;
-    let limits = { searchCount: 5, chatCount: 5, docsCount: 0, vaultFolderCount: 0, workflowCount: 0 };
-
-    if (user.subscriptionId) {
-      const sub = await Subscription.findById(user.subscriptionId);
-      if (sub && sub.status === 'active') {
-        planTier = 'Pro';
-        status = sub.status;
-        startDate = sub.currentPeriodStart;
-        nextBillingDate = sub.currentPeriodEnd;
-        limits = { searchCount: 50, chatCount: 50, docsCount: 50, vaultFolderCount: 50, workflowCount: 5 };
-      }
-    }
+    const plan = await resolvePlan(user);
+    await ensureUsageCycle(user, plan);
+    const planNames: Record<string, string> = { free: 'Free', pro: 'Pro', enterprise: 'Enterprise' };
+    const sub = plan.subscription;
 
     return res.json({
       user: {
@@ -164,22 +153,22 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
         email: user.email,
         company: user.company || '',
         role: user.role,
+        jobTitle: user.jobTitle || '',
         phone: user.phone || '',
-        image: user.image || ''
+        image: user.image || '',
+        memberSince: user.createdAt
       },
-      apiUsage: user.apiUsage || { searchCount: 0, chatCount: 0, docsCount: 0, vaultFolderCount: 0, workflowCount: 0 },
+      // Pastas e fluxos são contados pelo que existe no banco, para bater com o Cofre e os Fluxos
+      apiUsage: await getUsage(user),
       subscription: {
-        plan: planTier,
-        status: status,
-        startDate: startDate,
-        nextBillingDate: nextBillingDate,
-        limits: limits,
-        features: [
-          'Análise básica de documentos',
-          'Assistência limitada por chat com IA',
-          'Armazenamento de documentos (100 MB)',
-          'Suporte por e-mail'
-        ]
+        plan: planNames[plan.tier],
+        isAdmin: plan.isAdmin,
+        status: sub ? sub.status : 'active',
+        startDate: sub ? sub.currentPeriodStart : user.createdAt,
+        nextBillingDate: sub ? sub.currentPeriodEnd : null,
+        // null = sem limite (conta de administrador ou Enterprise)
+        limits: limitsForJson(plan),
+        features: plan.isAdmin ? ['Conta de administrador: sem limites de uso, para testes e suporte'] : PLAN_FEATURES[plan.tier]
       }
     });
   } catch (error) {
@@ -201,12 +190,13 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
       throw new NotFoundError('Usuário');
     }
 
-    const { fullName, email, company, role, phone } = req.body;
+    const { fullName, email, company, jobTitle, phone } = req.body;
 
     if (fullName) user.name = fullName;
     if (email) user.email = email;
     if (company) user.company = company;
-    if (role) user.role = role;
+    // A permissão da conta (role) nunca é alterada pelo próprio usuário
+    if (typeof jobTitle === 'string') user.jobTitle = jobTitle;
     if (phone) user.phone = phone;
 
     if (req.file) {
@@ -229,6 +219,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
         email: user.email,
         company: user.company || '',
         role: user.role,
+        jobTitle: user.jobTitle || '',
         phone: user.phone || '',
         image: user.image || ''
       }
