@@ -1,3 +1,4 @@
+import { ACCURACY_RULES } from '../config/aiRules';
 /**
  * Integração com a Maritaca AI (modelos Sabiá), focada em português do Brasil.
  * A API segue o formato da OpenAI (chat/completions), então usamos o fetch nativo
@@ -22,7 +23,8 @@ const LEGAL_SYSTEM_PROMPT = [
   'Responda sempre em português do Brasil, com precisão técnica e com base no ordenamento jurídico brasileiro (Constituição Federal, códigos, leis, súmulas e jurisprudência dos tribunais).',
   'Ao citar leis, artigos ou precedentes, indique a fonte. Nunca invente números de artigos, processos ou julgados: se não tiver certeza, diga isso claramente e recomende a conferência na fonte oficial.',
   'Organize a resposta em parágrafos curtos e, quando útil, em listas. Não use tabelas.',
-  'Ao final de respostas sobre casos concretos, lembre de forma breve que a resposta é informativa e que o caso deve ser avaliado por um advogado inscrito na OAB ou pela Defensoria Pública.',
+  'Ao final de respostas sobre casos concretos, lembre de forma breve que a resposta é informativa e que o caso deve ser avaliado por um advogado inscrito na OAB ou pela Defensoria Pública. Quando o pedido for a redação de uma peça (petição, contestação, recurso), esse lembrete vai depois da peça, nas observações, e não dentro dela.',
+  ACCURACY_RULES,
 ].join(' ');
 
 const LEVEL_INSTRUCTIONS: Record<string, string> = {

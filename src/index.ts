@@ -142,13 +142,15 @@ app.get('/health', (req: Request, res: Response) => {
 
   res.json({
     status: 'healthy',
+    // Versão do código no ar: serve para conferir se a última atualização foi publicada
+    version: '2026-11-06-relatorio-consolidado',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
       lastError: dbStatus === 1 ? null : lastDbError
     },
     // Only reports whether each variable is set (true/false), never its value
-    config: ['MONGO_URI', 'JWT_SECRET', 'GEMINI_API_KEY', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'EMAIL_USER', 'AWS_S3_BUCKET_NAME', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
+    config: ['MONGO_URI', 'JWT_SECRET', 'ADMIN_EMAIL', 'GEMINI_API_KEY', 'MARITACA_API_KEY', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'EMAIL_USER', 'AWS_S3_BUCKET_NAME', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
       .reduce((acc, key) => { acc[key] = Boolean(process.env[key]); return acc; }, {} as Record<string, boolean>),
     node: process.version,
     timestamp: new Date().toISOString()

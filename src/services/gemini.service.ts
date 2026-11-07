@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold, Content, Part, InlineDataPart } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import dotenv from 'dotenv';
+import { ACCURACY_RULES, citationWarningHTML } from '../config/aiRules';
 import { maritacaChat, isMaritacaConfigured, MARITACA_MODEL } from './maritaca.service';
 import fs from 'fs';
 import path from 'path';
@@ -24,7 +25,8 @@ const legalSystemPrompt = '';
 // Response language for Brazilian users
 const PT_BR_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).'
   // Regras pedidas no relatório da OAB: a IA não se apresenta como advogado nem presta consultoria
-  + ' ROLE: You are an artificial intelligence tool that provides general legal information based on Brazilian law. You are not a lawyer and do not provide legal advice or consultancy (Lei 8.906/1994). Never present yourself as a lawyer or legal consultant, never recommend specific lawyers or law firms, and never invent laws, articles, case numbers or court decisions; if unsure, say so. When answering a legal question, briefly remind the user that a lawyer registered with the OAB or the Defensoria Pública should assess their specific case.';
+  + ' ROLE: You are an artificial intelligence tool that provides general legal information based on Brazilian law. You are not a lawyer and do not provide legal advice or consultancy (Lei 8.906/1994). Never present yourself as a lawyer or legal consultant, never recommend specific lawyers or law firms, and never invent laws, articles, case numbers or court decisions; if unsure, say so. When answering a legal question, briefly remind the user that a lawyer registered with the OAB or the Defensoria Pública should assess their specific case.'
+  + ' ' + ACCURACY_RULES;
 
 // Configure safety settings
 const safetySettings = [
@@ -110,8 +112,9 @@ const withGeminiFallback = async <T>(run: (geminiModel: GenerativeModel) => Prom
       }
       console.error(`[gemini] Falha na tentativa ${attempt + 1} (modelo ${modelName}):`, error?.status || '', error?.message || error);
 
-      if (timedOut) {
-        // Repetir um modelo que não responde estouraria o limite da requisição
+      if (timedOut || error?.status === 503 || error?.status === 429) {
+        // Modelo lento ou sobrecarregado ("high demand"): repetir o mesmo modelo só atrasa
+        // a resposta e estoura o limite da requisição; vai direto ao modelo de reserva
         attempt = Math.max(attempt, attempts.length - 2);
       } else if (attempt === 0) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -240,13 +243,19 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
       maxOutputTokens: 2048, // Shorter to encourage conciseness
     };
 
-    const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent({
-      contents: [{ role: "user", parts: [{ text: searchEnhancementPrompt }] }],
-      generationConfig,
-    }));
-
-    const response = result.response;
-    const responseText = response.text();
+    let responseText: string;
+    try {
+      const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent({
+        contents: [{ role: "user", parts: [{ text: searchEnhancementPrompt }] }],
+        generationConfig,
+      }));
+      responseText = result.response.text();
+    } catch (geminiError: any) {
+      // Gemini indisponível (por exemplo, "high demand"): a pesquisa usa a Maritaca como reserva
+      if (!isMaritacaConfigured()) throw geminiError;
+      console.error('[pesquisa] Gemini indisponível, usando a Maritaca:', geminiError?.status || '', geminiError?.message || geminiError);
+      responseText = await maritacaChat(searchEnhancementPrompt, { languageLevel: 'regular' });
+    }
 
     // Format the response with HTML tags
     const formattedResponse = processResponseForDisplay(responseText);
@@ -300,10 +309,14 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
       maxOutputTokens: 1024, // Short responses only needed
     };
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: followUpPrompt }] }],
-      generationConfig,
-    });
+    // As sugestões são opcionais: no máximo 10 s, para não derrubar a pesquisa inteira
+    const result: any = await Promise.race([
+      withGeminiFallback((geminiModel) => geminiModel.generateContent({
+        contents: [{ role: "user", parts: [{ text: followUpPrompt }] }],
+        generationConfig,
+      })),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('follow-up timeout')), 10000)),
+    ]);
 
     const followUpResponse = result.response.text();
 
@@ -435,7 +448,7 @@ function processResponseForDisplay(text: string): string {
     formattedHtml += `</div>\n`;
   }
 
-  return formattedHtml;
+  return formattedHtml + citationWarningHTML(text);
 }
 
 /**
@@ -559,7 +572,7 @@ export function formatResponseToHTML(text: string): string {
   flushParagraph();
   closeList();
 
-  return finalHtml;
+  return finalHtml + citationWarningHTML(text);
 }
 
 // Update the generateChatResponse function to properly handle multimedia content
@@ -956,7 +969,7 @@ export const generateContentWithFile = async (
 
 
     // 5. Generate content with the file URI
-    const result = await model.generateContent([
+    const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent([
       {
         fileData: {
           mimeType: getFile.mimeType,
@@ -964,7 +977,7 @@ export const generateContentWithFile = async (
         },
       },
       { text: `${prompt}\n\nPlease respond in professional legal HTML format (headings, bullet points, bolding).\n\n${PT_BR_INSTRUCTION}` },
-    ]);
+    ]));
 
     const resText = result.response.text();
     return formatResponseToHTML(resText);
