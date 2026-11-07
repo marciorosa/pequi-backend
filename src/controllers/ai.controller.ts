@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../types';
 import geminiService from '../services/gemini.service';
 import { chatMode } from '../config/aiRules';
+import { buildLimpaNomePrompt, LimpaNomeData } from '../config/limpaNome';
+import { maritacaChat, isMaritacaConfigured } from '../services/maritaca.service';
 import User from '../models/user.model';
 import LegalDocument from '../models/document.model';
 
@@ -416,22 +418,20 @@ export const createAgreement = async (req: AuthRequest, res: Response) => {
     const specialRequirements = options?.specialRequirements || '';
     
     // Prepare the prompt for agreement creation
-    let agreementPrompt = `Create a legal agreement with the following details:`;
+    let agreementPrompt = `Redija um contrato com os seguintes dados:`;
     
     // Add specific agreement fields if they exist
-    if (data.parties) agreementPrompt += `\nParties: ${data.parties}`;
-    if (data.purpose) agreementPrompt += `\nPurpose: ${data.purpose}`;
-    if (data.obligations) agreementPrompt += `\nObligations: ${data.obligations}`;
-    if (data.consequences) agreementPrompt += `\nConsequences for Breach: ${data.consequences}`;
-    if (data.dates) agreementPrompt += `\nTerm & Dates: ${data.dates}`;
-    if (data.jurisdiction) agreementPrompt += `\nJurisdiction: ${data.jurisdiction}`;
+    if (data.parties) agreementPrompt += `\nPartes: ${data.parties}`;
+    if (data.purpose) agreementPrompt += `\nObjeto: ${data.purpose}`;
+    if (data.obligations) agreementPrompt += `\nObrigações: ${data.obligations}`;
+    if (data.consequences) agreementPrompt += `\nConsequências do descumprimento: ${data.consequences}`;
+    if (data.dates) agreementPrompt += `\nPrazo e datas: ${data.dates}`;
+    if (data.jurisdiction) agreementPrompt += `\nForo: ${data.jurisdiction}`;
     
-    // Add template details and special requirements
-    agreementPrompt += `\nTemplate Type: ${templateType}`;
-    if (specialRequirements) agreementPrompt += `\nSpecial Requirements: ${specialRequirements}`;
+    agreementPrompt += `\nModelo: ${templateType}`;
+    if (specialRequirements) agreementPrompt += `\nRequisitos especiais: ${specialRequirements}`;
     
-    // Instructions for formatting the output
-    agreementPrompt += `\n\nFormat the agreement with proper sections, numbered clauses, and legal terminology appropriate for this type of document. Ensure it's formatted in a professional legal style with proper headings, indentation, and clause numbering.`;
+    agreementPrompt += `\n\nOrganize o contrato em seções e cláusulas numeradas, com a terminologia jurídica adequada ao tipo de contrato e títulos claros.`;
     
     // Call the Gemini service for agreement creation
     // Contrato é peça: modo peça e autoauditoria completa
@@ -532,10 +532,10 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     }
 
     // Create a prompt for the AI to generate the document
-    let prompt = `Create a professional ${documentType} using the ${templateStyle} format.`;
+    let prompt = `Redija um documento do tipo "${documentType}", no modelo "${templateStyle}".`;
     
     if (specialRequirements) {
-      prompt += ` Include the following special requirements: ${specialRequirements}.`;
+      prompt += ` Inclua os seguintes requisitos especiais: ${specialRequirements}.`;
     }
     
     const referenceText = referenceDocumentFile?.data
@@ -543,12 +543,12 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
           referenceDocumentFile.data,
           referenceDocumentFile.mimeType || 'application/pdf',
           undefined,
-          'Transcribe the text of this document, without any comments.'
+          'Transcreva o texto deste documento, sem nenhum comentário.'
         )
       : referenceDocumentText;
 
     if (referenceText) {
-      prompt += ` Reference document for style and terminology: ${referenceText.substring(0, 1000)}...`;
+      prompt += ` Documento de referência para estilo e terminologia: ${referenceText.substring(0, 1000)}...`;
     }
     
     // Add template style-specific instructions
@@ -561,7 +561,7 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       case 'Contrato de Trabalho de Executivo':
       case 'Contrato com Prestador Autônomo':
       case 'Termo de Compromisso de Estágio':
-        prompt += ` Use appropriate language for a ${templateStyle.toLowerCase()}.`;
+        prompt += ` Use a linguagem adequada a: ${templateStyle.toLowerCase()}.`;
         break;
       // Add cases for other template styles with specific instructions
       case 'Standard Real Estate Lease':
@@ -572,7 +572,7 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       case 'Locação Comercial':
       case 'Locação Residencial':
       case 'Locação para Temporada':
-        prompt += ` Use appropriate language for a ${templateStyle.toLowerCase()}.`;
+        prompt += ` Use a linguagem adequada a: ${templateStyle.toLowerCase()}.`;
         break;
       // NDA templates
       case 'Standard NDA':
@@ -583,7 +583,7 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       case 'NDA Mútuo':
       case 'NDA para Funcionários':
       case 'NDA para Fornecedores':
-        prompt += ` Use appropriate language for a ${templateStyle.toLowerCase()}.`;
+        prompt += ` Use a linguagem adequada a: ${templateStyle.toLowerCase()}.`;
         break;
       // Other document types can follow a similar pattern
     }
@@ -592,32 +592,32 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     switch (documentType) {
       case 'Real Estate Lease':
       case 'Locação Imobiliária':
-        prompt += ` Include sections for: PROPERTY DESCRIPTION, TERM OF TENANCY, RENTAL PAYMENT, SECURITY DEPOSIT, UTILITIES, MAINTENANCE, RULES AND REGULATIONS, TERMINATION CONDITIONS, and SIGNATURES.`;
+        prompt += ` Inclua as seções: DESCRIÇÃO DO IMÓVEL, PRAZO DA LOCAÇÃO, ALUGUEL E PAGAMENTO, GARANTIA, DESPESAS E CONSUMO, CONSERVAÇÃO, REGRAS DE USO, RESCISÃO e ASSINATURAS.`;
         break;
       case 'Employment Contract':
       case 'Contrato de Trabalho':
-        prompt += ` Include sections for: PARTIES, POSITION AND DUTIES, COMPENSATION, TERM AND TERMINATION, CONFIDENTIALITY, INTELLECTUAL PROPERTY, NON-COMPETE, GOVERNING LAW, and SIGNATURES.`;
+        prompt += ` Inclua as seções: PARTES, CARGO E ATRIBUIÇÕES, REMUNERAÇÃO, PRAZO E RESCISÃO, CONFIDENCIALIDADE, PROPRIEDADE INTELECTUAL, NÃO CONCORRÊNCIA, LEGISLAÇÃO APLICÁVEL E FORO e ASSINATURAS.`;
         break;
       case 'Non-Disclosure Agreement':
       case 'Acordo de Confidencialidade':
-        prompt += ` Include sections for: PARTIES, DEFINITION OF CONFIDENTIAL INFORMATION, OBLIGATIONS OF RECEIVING PARTY, EXCLUSIONS FROM CONFIDENTIAL INFORMATION, TERM, RETURN OF INFORMATION, REMEDIES, and SIGNATURES.`;
+        prompt += ` Inclua as seções: PARTES, DEFINIÇÃO DE INFORMAÇÃO CONFIDENCIAL, OBRIGAÇÕES DA PARTE RECEPTORA, EXCEÇÕES, PRAZO, DEVOLUÇÃO DAS INFORMAÇÕES, PENALIDADES e ASSINATURAS.`;
         break;
       case 'Service Agreement':
       case 'Contrato de Prestação de Serviços':
-        prompt += ` Include sections for: PARTIES, SERVICES TO BE PROVIDED, PAYMENT TERMS, TERM AND TERMINATION, INTELLECTUAL PROPERTY, WARRANTIES, LIMITATION OF LIABILITY, INDEMNIFICATION, and SIGNATURES.`;
+        prompt += ` Inclua as seções: PARTES, SERVIÇOS PRESTADOS, PREÇO E PAGAMENTO, PRAZO E RESCISÃO, PROPRIEDADE INTELECTUAL, GARANTIAS, LIMITAÇÃO DE RESPONSABILIDADE, INDENIZAÇÃO e ASSINATURAS.`;
         break;
       case 'Partnership Agreement':
       case 'Contrato de Sociedade':
-        prompt += ` Include sections for: PARTIES, FORMATION, CAPITAL CONTRIBUTIONS, PROFITS AND LOSSES, MANAGEMENT, WITHDRAWAL AND DISSOLUTION, TRANSFER OF PARTNERSHIP INTEREST, DISPUTE RESOLUTION, and SIGNATURES.`;
+        prompt += ` Inclua as seções: PARTES, CONSTITUIÇÃO, CAPITAL SOCIAL, LUCROS E PERDAS, ADMINISTRAÇÃO, RETIRADA E DISSOLUÇÃO, CESSÃO DE QUOTAS, SOLUÇÃO DE CONFLITOS e ASSINATURAS.`;
         break;
       case 'Sales Contract':
       case 'Contrato de Compra e Venda':
-        prompt += ` Include sections for: PARTIES, DESCRIPTION OF GOODS, PURCHASE PRICE, DELIVERY, INSPECTION, WARRANTIES, RISK OF LOSS, REMEDIES FOR BREACH, GOVERNING LAW, and SIGNATURES.`;
+        prompt += ` Inclua as seções: PARTES, DESCRIÇÃO DO BEM, PREÇO, ENTREGA, VISTORIA, GARANTIAS, RISCOS, PENALIDADES PELO DESCUMPRIMENTO, LEGISLAÇÃO APLICÁVEL E FORO e ASSINATURAS.`;
         break;
     }
     
     // Add formatting instructions
-    prompt += " Format the document with proper section numbering, indentation, and whitespace for clarity. Ensure all numbers remain on the same line as their section headers. Use ALL CAPS for section headings. Include signature blocks at the end. Use [PREENCHER: descrição] for every field that depends on information not provided.";
+    prompt += " Numere as seções, com recuo e espaçamento claros, e mantenha cada número na mesma linha do título da seção. Use títulos de seção em CAIXA ALTA. Inclua os campos de assinatura no fim. Use [PREENCHER: descrição] para todo dado que não foi informado.";
     
     // Call the Gemini service for document creation
     // Documento é peça: modo peça e autoauditoria completa
@@ -647,4 +647,47 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
       error: (error as Error).message 
     });
   }
-}; 
+};
+
+/**
+ * Serviço Limpa Nome (Pesquisa Inteligente): gera a petição inicial de Ação Declaratória de
+ * Inexistência de Débito com Danos Morais e Tutela de Urgência, a partir do formulário.
+ * Usa a Maritaca (escrita em português) no modo peça e o Gemini como reserva.
+ */
+export const createLimpaNome = async (req: AuthRequest, res: Response) => {
+  try {
+    const data: LimpaNomeData = req.body?.data || {};
+    const prompt = buildLimpaNomePrompt(data);
+
+    let text = '';
+    if (isMaritacaConfigured()) {
+      try {
+        text = await maritacaChat(prompt, { mode: 'peca', maxTokens: 6000, timeoutMs: 70000 });
+      } catch (maritacaError: any) {
+        console.error('[limpa-nome] Falha na Maritaca, usando o Gemini:', maritacaError?.message || maritacaError);
+      }
+    }
+    if (!text) {
+      text = await geminiService.generateLegalResponse(prompt, undefined, 'peca');
+    }
+
+    const content = geminiService.formatResponseToHTML(text);
+    if (isAiFailureMessage(content)) {
+      throw new Error('Falha ao gerar a petição com o modelo de IA');
+    }
+
+    const autor = String(data.autorNome || '').trim().slice(0, 80);
+    const title = `Limpa Nome: Ação Declaratória de Inexistência de Débito${autor ? ` (${autor})` : ''}`;
+    const saved = await LegalDocument.create({
+      userId: req.user?.id,
+      title,
+      content,
+      documentType: 'Petição inicial',
+      templateStyle: 'Limpa Nome',
+    });
+
+    res.json({ success: true, id: saved.id, title, content });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao gerar a petição do Limpa Nome', error: (error as Error).message });
+  }
+};

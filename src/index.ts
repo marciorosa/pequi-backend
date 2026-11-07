@@ -69,8 +69,12 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 /**
  * Request timeout middleware (55 seconds)
  */
+// Rotas que geram peças longas recebem mais tempo
+const LONG_REQUEST_PATHS = ['/api/ai/limpa-nome'];
+
 const timeoutMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  req.setTimeout(55000, () => {
+  const limitMs = LONG_REQUEST_PATHS.includes(req.path) ? 120000 : 55000;
+  req.setTimeout(limitMs, () => {
     if (!res.headersSent) {
       res.status(504).json({
         message: 'Tempo limite da requisição esgotado - a operação demorou demais',
@@ -79,7 +83,7 @@ const timeoutMiddleware = (req: Request, res: Response, next: NextFunction) => {
     }
   });
 
-  res.setTimeout(55000, () => {
+  res.setTimeout(limitMs, () => {
     if (!res.headersSent) {
       res.status(504).json({
         message: 'Tempo limite da resposta esgotado - a operação demorou demais',
@@ -143,7 +147,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-07-prompt-consolidado',
+    version: '2026-11-07-limpa-nome',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,

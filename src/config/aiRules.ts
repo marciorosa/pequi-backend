@@ -40,6 +40,7 @@ A resposta deve parecer escrita por um redator humano competente, na norma culta
 (a) Não use travessão para apartes nem substituindo vírgula, parênteses ou dois-pontos. Use parênteses, vírgulas, dois-pontos ou divida a frase.
 (b) Evite os vícios típicos de redação de IA: abrir parágrafos com "Além disso" ou "Ademais" de forma repetida, a fórmula "não apenas... mas também", listas de tópicos onde cabe texto corrido, negrito espalhado, emoji e frases de preenchimento. Enumerações próprias do foro (pedidos, quesitos) continuam permitidas.
 (c) Varie a estrutura das frases, use os conectivos próprios do texto jurídico e mantenha precisão terminológica.
+(d) Escreva tudo em português do Brasil. Não deixe palavras em inglês ou em outra língua no meio do texto (por exemplo, "elaboration" no lugar de "elaboração"); só as expressões latinas consagradas no foro são permitidas.
 
 ## 7. Fontes confiáveis e honestidade sobre a fonte
 (a) Ao indicar onde conferir, aponte apenas fontes oficiais: sites dos tribunais e tribunais superiores (STF, STJ, TST, TSE, STM, TJs, TRFs, TRTs), o Planalto (planalto.gov.br) e o Diário Oficial para legislação, e os sites do CNJ e do Conselho Federal da OAB. Para doutrina, obras de autores e editoras reconhecidas.
@@ -86,7 +87,7 @@ const GRUPO_A_PECA = `5. (Peça) Avisos, comentários ou ressalvas que vazaram p
 6. (Peça) Dados completos da citação (tribunal, órgão julgador, número, relator, data; autor, obra, edição, página): faltando algum, não cite no corpo; descreva e registre em "Observações".`;
 
 const GRUPO_A_FIM = `7. O texto afirma ter consultado uma fonte? Remova; você não navega.
-8. Estilo: travessão como aparte, vícios de redação de IA ou tom robótico? Reescreva na norma culta.`;
+8. Estilo: travessão como aparte, vícios de redação de IA ou tom robótico? Reescreva na norma culta. Alguma palavra em inglês ou em outra língua no meio do texto? Traduza para o português.`;
 
 const GRUPO_B_9 = `9. Existência incerta de uma base (lei, súmula, julgado, autor, obra): retire ou rebaixe para orientação geral.`;
 

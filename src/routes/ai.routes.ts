@@ -7,7 +7,8 @@ import {
   compareDocuments,
   createAgreement,
   translateDocument,
-  createDocument
+  createDocument,
+  createLimpaNome
 } from '../controllers/ai.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { checkFeatureLimit, checkLawyerAccess } from '../middleware/subscription.middleware';
@@ -25,5 +26,8 @@ router.post('/document-translation', authMiddleware, checkFeatureLimit('docsCoun
 
 // Register createDocument route
 router.post('/create-document', authMiddleware, checkFeatureLimit('docsCount'), createDocument as any);
+
+// Serviço Limpa Nome (Pesquisa Inteligente): gera uma peça, então conta como operação de documento
+router.post('/limpa-nome', authMiddleware, checkFeatureLimit('docsCount'), createLimpaNome as any);
 
 export default router; 

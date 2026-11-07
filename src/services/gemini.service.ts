@@ -23,7 +23,7 @@ const fileManager = new GoogleAIFileManager(apiKey || '');
 const legalSystemPrompt = '';
 
 // Response language for Brazilian users
-const LANGUAGE_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).';
+const LANGUAGE_INSTRUCTION = 'IDIOMA: escreva a resposta inteira em português do Brasil, sem palavras em inglês ou em outra língua no meio do texto, a menos que a tarefa peça expressamente outro idioma (por exemplo, uma tradução).';
 
 // Instruções consolidadas do Pequi (07/11/2026): Núcleo, Exemplos, modo e autoauditoria
 const instructionsFor = (mode: AiMode): string => `${LANGUAGE_INSTRUCTION}\n\n${aiInstructions(mode)}`;
@@ -158,7 +158,7 @@ export const generateLegalResponse = async (prompt: string, context?: any, mode:
         history: [],
         generationConfig: {
           ...NO_THINKING,
-          temperature: 0.7,
+          temperature: mode === 'peca' ? 0.3 : 0.7,
           topP: 0.95,
           topK: 64,
           maxOutputTokens: 8192,
@@ -217,24 +217,19 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
     ${query}
     ${filters ? `\nFilters: ${JSON.stringify(filters)}` : ''}
     
-    You are an AI legal information tool focused on Brazilian law (Constituição Federal, códigos, leis federais, súmulas). You are not a lawyer and this is informational content, not legal advice.
-    
-    Provide a concise, informative explanation of this legal query in exactly this format:
-    
-    1. Start with a clear title (3-6 words) that captures the key legal concept. Do NOT use asterisks or stars.
-    
-    2. Write a 1-4 sentence introduction that summarizes the query
-    
-    3. Present exactly 5 to 7 key legal points as a numbered list (1-7), where each point:
-       - Has a meaningful heading followed by a colon
-       - Includes a 3 to 4 lines of explanation after each heading
-       - Focuses on the most important legal principles relevant to the query
-       - Uses precise legal terminology while remaining accessible
-       - IMPORTANT: Do NOT use any asterisks (*) or markdown formatting in your response
-    
-    FORMATTING INSTRUCTION: DO NOT use any markdown syntax (no stars/asterisks, no hashes, no underscores) in your response.
+    Você é uma ferramenta de IA de informação jurídica sobre o Direito brasileiro (Constituição Federal, códigos, leis federais, súmulas). Você não é advogado; o conteúdo é informativo e não é consultoria jurídica.
 
-    ACCURACY INSTRUCTION: You have no access to court records or case-law databases. Never invent case numbers, parties, rulings or citations. Cite only laws and legal principles you are sure exist.
+    Explique o tema pesquisado de forma concisa, exatamente neste formato:
+
+    1. Comece com um título claro (3 a 6 palavras) que resuma o conceito jurídico principal.
+
+    2. Escreva uma introdução de 1 a 4 frases que resuma o tema.
+
+    3. Apresente de 5 a 7 pontos jurídicos principais em lista numerada (1 a 7). Cada ponto tem um título curto seguido de dois-pontos e 3 a 4 linhas de explicação, com terminologia precisa e acessível, focada nos princípios jurídicos mais relevantes.
+
+    FORMATAÇÃO: não use nenhuma marcação markdown (sem asteriscos, cerquilhas ou sublinhados).
+
+    PRECISÃO: você não tem acesso a processos nem a bases de jurisprudência. Nunca invente números de processo, partes, decisões ou citações.
 
     ${PT_BR_INSTRUCTION}
     `;
@@ -287,21 +282,21 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
 async function generateFollowUpPrompts(originalQuery: string, responseText: string): Promise<string[]> {
   try {
     const followUpPrompt = `
-    Original Query: ${originalQuery}
-    
-    Based on this query and your response, generate exactly 3 follow-up questions that a user might want to explore next.
-    
-    Requirements:
-    1. Each follow-up should be directly related to the original topic but explore a different aspect or go deeper
-    2. Each should be phrased as a complete question (with a question mark)
-    3. Keep each follow-up between 5-10 words for quick readability
-    4. Make them specific enough to generate a detailed response
-    5. Format your response as a simple list of 3 questions, one per line, numbered 1-3
-    
-    For example:
-    1. How does [topic] apply in California?
-    2. What are recent changes to [topic]?
-    3. How does [topic] differ internationally?
+    Pesquisa original: ${originalQuery}
+
+    Com base nessa pesquisa, gere exatamente 3 perguntas de aprofundamento que o usuário poderia querer explorar em seguida.
+
+    Requisitos:
+    1. Cada pergunta deve tratar do mesmo tema, mas explorar outro aspecto ou aprofundá-lo
+    2. Cada uma deve ser uma pergunta completa (com ponto de interrogação)
+    3. Cada uma deve ter de 5 a 12 palavras
+    4. Sejam específicas o bastante para gerar uma resposta detalhada
+    5. Responda com uma lista simples de 3 perguntas, uma por linha, numeradas de 1 a 3
+
+    Exemplo:
+    1. Quais documentos comprovam esse direito?
+    2. O que mudou recentemente nesse tema?
+    3. Qual é o prazo para reclamar?
 
     ${LANGUAGE_INSTRUCTION}
     `;
@@ -715,13 +710,13 @@ export const generateChatResponse = async (
     if (options.languageLevel) {
       switch (options.languageLevel) {
         case 'professional':
-          languageInstruction = 'Please respond in a professional legal tone with appropriate legal terminology.';
+          languageInstruction = 'Responda em tom profissional, com a terminologia jurídica adequada.';
           break;
         case 'regular':
-          languageInstruction = 'Please respond in a balanced tone, using some legal terms but explaining them clearly.';
+          languageInstruction = 'Responda em tom equilibrado: alguns termos jurídicos, sempre explicados com clareza.';
           break;
         case 'simple':
-          languageInstruction = 'Please respond in simple, plain language avoiding complex legal terminology.';
+          languageInstruction = 'Responda em linguagem simples e acessível, evitando termos jurídicos complexos.';
           break;
       }
 
@@ -736,7 +731,7 @@ export const generateChatResponse = async (
 
     // Add web search instruction if enabled
     if (options.useWebSearch) {
-      const webSearchNote = 'Please include recent legal developments and cite sources when possible.';
+      const webSearchNote = 'O usuário pediu informações atualizadas: mencione os desenvolvimentos recentes que conhecer e avise que mudanças muito recentes devem ser conferidas nas fontes oficiais. Você não navega na internet.';
 
       // Append to first text part or add as new part
       if (parts.length > 0 && 'text' in parts[0]) {
@@ -767,7 +762,7 @@ export const generateChatResponse = async (
             history: history.length > 0 ? history : undefined,
             generationConfig: {
               ...NO_THINKING,
-              temperature: 0.7,
+              temperature: mode === 'peca' ? 0.3 : 0.7,
               topP: 0.95,
               topK: 64,
               maxOutputTokens: 8192,
@@ -815,9 +810,9 @@ export const analyzeDocument = async (
     let analysisPrompt = prompt || '';
     if (!analysisPrompt) {
       if (mimeType === 'application/pdf') {
-        analysisPrompt = `Analyze this PDF document. Provide a comprehensive summary of its content, highlighting key information, legal implications, and any important details. Structure your response with clear headings and bullet points for better readability.`;
+        analysisPrompt = `Analise este documento PDF. Faça um resumo completo do conteúdo, destacando as informações principais, as implicações jurídicas e os detalhes importantes, com títulos claros.`;
       } else if (mimeType.startsWith('image/')) {
-        analysisPrompt = `Analyze this image. Identify and describe any legal documents, contracts, or relevant information visible in the image. Provide a detailed explanation of what you see and any legal implications. Structure your response with clear headings and bullet points for better readability.`;
+        analysisPrompt = `Analise esta imagem. Identifique e descreva documentos jurídicos, contratos ou informações relevantes que apareçam nela e explique as implicações jurídicas, com títulos claros.`;
       }
     }
 
@@ -985,7 +980,7 @@ export const generateContentWithFile = async (
           fileUri: getFile.uri,
         },
       },
-      { text: `${prompt}\n\nPlease respond in professional legal HTML format (headings, bullet points, bolding).\n\n${PT_BR_INSTRUCTION}` },
+      { text: `${prompt}\n\nResponda com formatação jurídica profissional (títulos e, quando útil, listas).\n\n${PT_BR_INSTRUCTION}` },
     ]));
 
     const resText = result.response.text();

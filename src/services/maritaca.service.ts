@@ -47,7 +47,7 @@ const toPlainText = (value: string): string =>
 /** Chamada genérica ao endpoint chat/completions da Maritaca. */
 export const maritacaCompletion = async (
   messages: MaritacaMessage[],
-  options: { temperature?: number; maxTokens?: number; model?: string } = {}
+  options: { temperature?: number; maxTokens?: number; model?: string; timeoutMs?: number } = {}
 ): Promise<string> => {
   const apiKey = process.env.MARITACA_API_KEY;
   if (!apiKey) {
@@ -60,7 +60,8 @@ export const maritacaCompletion = async (
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MARITACA_TIMEOUT_MS);
+  const timeoutMs = options.timeoutMs ?? MARITACA_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetchFn(`${MARITACA_BASE_URL}/chat/completions`, {
@@ -100,7 +101,7 @@ export const maritacaCompletion = async (
     return text.trim();
   } catch (error: any) {
     if (error?.name === 'AbortError') {
-      throw new Error(`Maritaca: tempo limite de ${MARITACA_TIMEOUT_MS / 1000}s esgotado`);
+      throw new Error(`Maritaca: tempo limite de ${timeoutMs / 1000}s esgotado`);
     }
     throw error;
   } finally {
@@ -116,6 +117,8 @@ export const maritacaChat = async (
     useWebSearch?: boolean;
     chatHistory?: Array<{ role: string; content: string }>;
     mode?: AiMode;
+    maxTokens?: number;
+    timeoutMs?: number;
   } = {}
 ): Promise<string> => {
   const systemParts = [legalSystemPrompt(options.mode || 'informativo')];
@@ -149,7 +152,9 @@ export const maritacaChat = async (
 
   messages.push({ role: 'user', content: (prompt || '').trim() || 'Preciso de ajuda com uma questão jurídica.' });
 
-  return maritacaCompletion(messages, { temperature: 0.4, maxTokens: 4096 });
+  // Peças pedem precisão: menos variação no texto
+  const temperature = options.mode === 'peca' ? 0.2 : 0.4;
+  return maritacaCompletion(messages, { temperature, maxTokens: options.maxTokens ?? 4096, timeoutMs: options.timeoutMs });
 };
 
 /** Diagnóstico usado em /health/ai?provider=maritaca. Nunca expõe a chave. */
