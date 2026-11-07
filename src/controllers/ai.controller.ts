@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../types';
 import geminiService from '../services/gemini.service';
+import { chatMode } from '../config/aiRules';
 import User from '../models/user.model';
 import LegalDocument from '../models/document.model';
 
@@ -24,7 +25,7 @@ export const generateAssistantResponse = async (req: AuthRequest, res: Response)
       return;
     }
     
-    const aiResponse = await geminiService.generateLegalResponse(prompt, context);
+    const aiResponse = await geminiService.generateLegalResponse(prompt, context, chatMode(prompt));
     
     // Process the response to ensure proper structure
     const formattedResponse = formatLegalResponse(aiResponse);
@@ -433,10 +434,12 @@ export const createAgreement = async (req: AuthRequest, res: Response) => {
     agreementPrompt += `\n\nFormat the agreement with proper sections, numbered clauses, and legal terminology appropriate for this type of document. Ensure it's formatted in a professional legal style with proper headings, indentation, and clause numbering.`;
     
     // Call the Gemini service for agreement creation
-    const agreementResult = await geminiService.generateLegalResponse(agreementPrompt);
+    // Contrato é peça: modo peça e autoauditoria completa
+    const agreementResult = await geminiService.generateLegalResponse(agreementPrompt, undefined, 'peca');
     
-    // Process the response to ensure proper formatting
-    const formattedAgreement = await geminiService.generateChatResponse(agreementResult, {});
+    // Só converte a formatação para HTML. Antes o contrato era reenviado ao Chat como se fosse
+    // uma pergunta, e a IA podia comentar o texto ou misturar avisos ao corpo do contrato.
+    const formattedAgreement = geminiService.formatResponseToHTML(agreementResult);
 
     if (isAiFailureMessage(formattedAgreement)) {
       throw new Error('Falha ao gerar o contrato com o modelo de IA');
@@ -614,10 +617,11 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     }
     
     // Add formatting instructions
-    prompt += " Format the document with proper section numbering, indentation, and whitespace for clarity. Ensure all numbers remain on the same line as their section headers. Use ALL CAPS for section headings. Include signature blocks at the end. Use [BLANK] or [INSERT TEXT HERE] for fields that need to be filled in.";
+    prompt += " Format the document with proper section numbering, indentation, and whitespace for clarity. Ensure all numbers remain on the same line as their section headers. Use ALL CAPS for section headings. Include signature blocks at the end. Use [PREENCHER: descrição] for every field that depends on information not provided.";
     
     // Call the Gemini service for document creation
-    const documentContent = await geminiService.generateLegalResponse(prompt);
+    // Documento é peça: modo peça e autoauditoria completa
+    const documentContent = await geminiService.generateLegalResponse(prompt, undefined, 'peca');
     
     const title = `${documentType} - ${templateStyle}`;
     const savedDocument = await LegalDocument.create({

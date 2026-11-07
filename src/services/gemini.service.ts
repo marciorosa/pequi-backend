@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold, Content, Part, InlineDataPart } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import dotenv from 'dotenv';
-import { ACCURACY_RULES, citationWarningHTML } from '../config/aiRules';
+import { AiMode, aiInstructions, chatMode, citationWarningHTML } from '../config/aiRules';
 import { maritacaChat, isMaritacaConfigured, MARITACA_MODEL } from './maritaca.service';
 import fs from 'fs';
 import path from 'path';
@@ -23,10 +23,15 @@ const fileManager = new GoogleAIFileManager(apiKey || '');
 const legalSystemPrompt = '';
 
 // Response language for Brazilian users
-const PT_BR_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).'
-  // Regras pedidas no relatório da OAB: a IA não se apresenta como advogado nem presta consultoria
-  + ' ROLE: You are an artificial intelligence tool that provides general legal information based on Brazilian law. You are not a lawyer and do not provide legal advice or consultancy (Lei 8.906/1994). Never present yourself as a lawyer or legal consultant, never recommend specific lawyers or law firms, and never invent laws, articles, case numbers or court decisions; if unsure, say so. When answering a legal question, briefly remind the user that a lawyer registered with the OAB or the Defensoria Pública should assess their specific case.'
-  + ' ' + ACCURACY_RULES;
+const LANGUAGE_INSTRUCTION = 'LANGUAGE: Unless the task explicitly asks for a different output language (for example, a translation into another language), write the entire response in Brazilian Portuguese (pt-BR).';
+
+// Instruções consolidadas do Pequi (07/11/2026): Núcleo, Exemplos, modo e autoauditoria
+const instructionsFor = (mode: AiMode): string => `${LANGUAGE_INSTRUCTION}\n\n${aiInstructions(mode)}`;
+
+// Modo informativo: Chat, Pesquisa e análise de documentos
+const PT_BR_INSTRUCTION = instructionsFor('informativo');
+// Modo peça: criação de documentos, contratos e pedidos de peça no Chat
+const PECA_INSTRUCTION = instructionsFor('peca');
 
 // Configure safety settings
 const safetySettings = [
@@ -131,7 +136,7 @@ const withGeminiFallback = async <T>(run: (geminiModel: GenerativeModel) => Prom
  * @param context Additional context (previous conversation, document content, etc.)
  * @returns The AI-generated response
  */
-export const generateLegalResponse = async (prompt: string, context?: any): Promise<string> => {
+export const generateLegalResponse = async (prompt: string, context?: any, mode: AiMode = 'informativo'): Promise<string> => {
   try {
     // Prepare the prompt with context if available
     let fullPrompt = prompt;
@@ -144,7 +149,7 @@ export const generateLegalResponse = async (prompt: string, context?: any): Prom
       }
     }
 
-    fullPrompt += `\n\n${PT_BR_INSTRUCTION}`;
+    fullPrompt += `\n\n${mode === 'peca' ? PECA_INSTRUCTION : PT_BR_INSTRUCTION}`;
 
     // Generate response
     const result = await withGeminiFallback((geminiModel) =>
@@ -298,7 +303,7 @@ async function generateFollowUpPrompts(originalQuery: string, responseText: stri
     2. What are recent changes to [topic]?
     3. How does [topic] differ internationally?
 
-    ${PT_BR_INSTRUCTION}
+    ${LANGUAGE_INSTRUCTION}
     `;
 
     const generationConfig = {
@@ -590,6 +595,8 @@ export const generateChatResponse = async (
     chatHistory?: Array<{ role: string, content: string }>
   }
 ): Promise<string> => {
+  // Pedido de peça usa o modo peça; as demais perguntas, o modo informativo
+  const mode = chatMode(prompt);
   // Mensagens de texto vão primeiro para a Maritaca (padrão). Arquivos (PDF/imagem)
   // e qualquer falha da Maritaca seguem para o Gemini, que funciona como reserva.
   if (CHAT_PROVIDER === 'maritaca' && isMaritacaConfigured() && !options.context?.inlineData) {
@@ -598,6 +605,7 @@ export const generateChatResponse = async (
         languageLevel: options.languageLevel,
         useWebSearch: options.useWebSearch,
         chatHistory: options.chatHistory,
+        mode,
       });
       return formatResponseToHTML(text);
     } catch (maritacaError: any) {
@@ -739,10 +747,11 @@ export const generateChatResponse = async (
     }
 
     // Always answer in Brazilian Portuguese
+    const chatInstruction = mode === 'peca' ? PECA_INSTRUCTION : PT_BR_INSTRUCTION;
     if (parts.length > 0 && 'text' in parts[0]) {
-      parts[0].text = `${parts[0].text}\n\n${PT_BR_INSTRUCTION}`;
+      parts[0].text = `${parts[0].text}\n\n${chatInstruction}`;
     } else {
-      parts.push({ text: PT_BR_INSTRUCTION });
+      parts.push({ text: chatInstruction });
     }
 
     // Send message to model
