@@ -28,6 +28,7 @@ Quando faltar segurança sobre uma base, descreva o entendimento em termos gerai
 
 ## 3. Afirmações jurídicas assertivas
 A mesma cautela vale para afirmações sem citação: prazos, competência, cálculos, requisitos e consequências jurídicas. Não afirme um prazo, uma regra de competência ou um resultado de cálculo sem segurança; na dúvida, explique o critério e indique a conferência, em vez de cravar um número.
+Também não apresente como presunção legal, entendimento "pacífico", "consolidado" ou "assente" aquilo que não tenha base certa. Exemplo de erro: afirmar que "presume-se a existência de comodato gratuito entre os ex-cônjuges sobre o bem indiviso"; essa presunção não existe. Uma tese defensável sem base certa deve ser formulada como argumento ("pode-se sustentar que...", "é razoável entender que..."), nunca como regra assentada.
 
 ## 4. Fatos
 Use apenas os fatos informados pelo usuário. Nunca invente partes, datas, valores, documentos, provas, benfeitorias ou acontecimentos. Se faltar um fato necessário, pergunte ou deixe um campo [PREENCHER]. Um campo [PREENCHER] é a resposta correta; inventar um fato é erro grave. Prefira sempre o campo em branco à suposição.
@@ -72,7 +73,8 @@ Na peça, você redige em favor da parte que a encomenda e a defende com rigor t
 ## Observações, em seção apartada
 - Depois da peça, e só depois, inclua a seção "Observações (não integram a peça)".
 - Nela ficam: citações a conferir em fonte oficial, pontos de atenção, teses alternativas e o aviso de que advogado inscrito na OAB deve revisar antes do protocolo.
-- Nunca misture essa seção com o corpo da peça.`;
+- Nunca misture essa seção com o corpo da peça.
+- O aviso de revisão por advogado vai somente dentro dessa seção, com esse título exato. Não escreva "Aviso:", "Nota:" ou "Importante:" soltos no fim da peça.`;
 
 const AUTOAUDITORIA_ABERTURA = `# AUTOAUDITORIA ANTES DE ENTREGAR (passo interno e obrigatório)
 Antes de entregar qualquer resposta, revise-a na postura de um auditor externo cético e detalhista, como se tivesse a tarefa de reprovar o texto de outra pessoa. Este passo é interno: corrija o texto, não narre a auditoria nem acrescente à resposta um selo de "auditado".`;
@@ -91,7 +93,7 @@ const GRUPO_A_FIM = `7. O texto afirma ter consultado uma fonte? Remova; você n
 
 const GRUPO_B_9 = `9. Existência incerta de uma base (lei, súmula, julgado, autor, obra): retire ou rebaixe para orientação geral.`;
 
-const GRUPO_B_10_11 = `10. Afirmação assertiva sem fonte (prazo, competência, cálculo, consequência): troque o número cravado pela explicação do critério.
+const GRUPO_B_10_11 = `10. Afirmação assertiva sem fonte (prazo, competência, cálculo, consequência, presunção legal, "entendimento pacífico"): troque o número cravado pela explicação do critério e rebaixe a presunção ou o "pacífico" sem base certa para argumento ("pode-se sustentar que...").
 11. Atualidade: o ponto pode ter mudado? Sinalize.`;
 
 const CRITERIO_FINAL = `Critério final: toda citação que permanecer deve poder ser conferida (número completo e conteúdo enunciado). Na dúvida entre manter um número inseguro e descrever sem número, descreva sem número.`;
@@ -130,7 +132,12 @@ Resposta correta: "Costuma-se entender que o ex-cônjuge que ocupa com exclusivi
 
 ## Exemplo 3: citação correta, com dados completos (correto)
 Quando há segurança da base e de todos os seus dados, cite por inteiro. Exemplo: STJ, REsp 1.250.362/RS, Segunda Seção, Rel. Min. Raul Araújo, j. 08/02/2017, que reconheceu o direito à indenização pelo uso exclusivo de imóvel comum por um dos ex-cônjuges, ainda que não formalizada a partilha.
-(Por que está certo: número completo, tribunal, órgão julgador, relator e data, com o conteúdo enunciado.)`;
+(Por que está certo: número completo, tribunal, órgão julgador, relator e data, com o conteúdo enunciado.)
+
+## Exemplo 4: tese sem base certa em peça (errado e correto)
+Errado: "Presume-se a existência de comodato gratuito entre os ex-cônjuges sobre o bem indiviso."
+Correto: "Pode-se sustentar que a ocupação do imóvel comum, tolerada pelo autor até [PREENCHER: data], teve caráter de mera permissão, o que afasta a cobrança pelo período anterior."
+(Por que está certo: não inventa presunção legal; apresenta a tese como argumento e usa [PREENCHER] para o fato faltante.)`;
 
 /**
  * Instruções completas para um modo: Núcleo, Exemplos, o modo e a autoauditoria
@@ -193,6 +200,20 @@ export const findCitations = (text: string): string[] => {
   return found.slice(0, 15);
 };
 
+// Afirmações apresentadas como regra assentada, que precisam de fundamento (Relatório 4)
+const ASSERTION_PATTERN =
+  /[^.;:!?]*\b(?:presume-se|presumem-se|há presunção|existe presunção|é pacífic[oa]|jurisprudência pacífica|entendimento pacífico|entendimento consolidado|jurisprudência consolidada|é assente|entendimento assente|pacificou)\b[^.;:!?]*/gi;
+
+/** Lista as afirmações de presunção ou de entendimento "pacífico" encontradas no texto. */
+export const findAssertions = (text: string): string[] => {
+  const found: string[] = [];
+  for (const match of toPlain(text).match(ASSERTION_PATTERN) || []) {
+    const frase = match.trim();
+    uniquePush(found, frase.length > 180 ? `${frase.slice(0, 177)}...` : frase);
+  }
+  return found.slice(0, 8);
+};
+
 /** Lista os prazos com número cravado encontrados no texto (sem repetição). */
 export const findDeadlines = (text: string): string[] => {
   const found: string[] = [];
@@ -207,13 +228,15 @@ export const findDeadlines = (text: string): string[] => {
 export const citationWarningHTML = (text: string): string => {
   const citations = findCitations(text);
   const deadlines = findDeadlines(text);
-  if (citations.length === 0 && deadlines.length === 0) return '';
+  const assertions = findAssertions(text);
+  if (citations.length === 0 && deadlines.length === 0 && assertions.length === 0) return '';
   const list = (items: string[]) => `<ul>${items.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>`;
   const parts = [
     '<div class="citation-check"><p><strong>Confira estas citações e prazos antes de usar.</strong> A IA pode errar números, conteúdos e prazos. Verifique cada ponto abaixo em fonte oficial (planalto.gov.br, stf.jus.br, stj.jus.br, cnj.jus.br, sites dos tribunais). Este aviso não faz parte do texto acima.</p>',
   ];
   if (citations.length > 0) parts.push(`<p>Citações:</p>${list(citations)}`);
   if (deadlines.length > 0) parts.push(`<p>Prazos:</p>${list(deadlines)}`);
+  if (assertions.length > 0) parts.push(`<p>Afirmações que precisam de fundamento (presunções e entendimentos ditos pacíficos):</p>${list(assertions)}`);
   parts.push('</div>');
   return parts.join('');
 };

@@ -70,10 +70,14 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
  * Request timeout middleware (55 seconds)
  */
 // Rotas que geram peças longas recebem mais tempo
-const LONG_REQUEST_PATHS = ['/api/ai/limpa-nome'];
+// A Pesquisa tem 90 s: o Gemini e a Maritaca (reserva) podem precisar responder em sequência
+const LONG_REQUEST_LIMITS: Record<string, number> = {
+  '/api/ai/limpa-nome': 120000,
+  '/api/ai/search': 90000,
+};
 
 const timeoutMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const limitMs = LONG_REQUEST_PATHS.includes(req.path) ? 120000 : 55000;
+  const limitMs = LONG_REQUEST_LIMITS[req.path] ?? 55000;
   req.setTimeout(limitMs, () => {
     if (!res.headersSent) {
       res.status(504).json({
@@ -147,7 +151,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-07-limpa-nome',
+    version: '2026-11-13-relatorio-4',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,

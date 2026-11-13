@@ -655,6 +655,7 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
  * Usa a Maritaca (escrita em português) no modo peça e o Gemini como reserva.
  */
 export const createLimpaNome = async (req: AuthRequest, res: Response) => {
+  const startedAt = Date.now();
   try {
     const data: LimpaNomeData = req.body?.data || {};
     const prompt = buildLimpaNomePrompt(data);
@@ -663,12 +664,14 @@ export const createLimpaNome = async (req: AuthRequest, res: Response) => {
     if (isMaritacaConfigured()) {
       try {
         text = await maritacaChat(prompt, { mode: 'peca', maxTokens: 6000, timeoutMs: 70000 });
+        // Revisão de idioma e seção de Observações (a rota tem 120 s)
+        if (text) text = await geminiService.revisarPeca(text, startedAt + 110000);
       } catch (maritacaError: any) {
         console.error('[limpa-nome] Falha na Maritaca, usando o Gemini:', maritacaError?.message || maritacaError);
       }
     }
     if (!text) {
-      text = await geminiService.generateLegalResponse(prompt, undefined, 'peca');
+      text = await geminiService.generateLegalResponse(prompt, undefined, 'peca', startedAt + 110000);
     }
 
     const content = geminiService.formatResponseToHTML(text);

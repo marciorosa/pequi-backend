@@ -2,7 +2,8 @@ import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold, 
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import dotenv from 'dotenv';
 import { AiMode, aiInstructions, chatMode, citationWarningHTML } from '../config/aiRules';
-import { maritacaChat, isMaritacaConfigured, MARITACA_MODEL } from './maritaca.service';
+import { corrigirIdiomaDicionario, findForeignWords, aplicarTraducoes, promptTraducao, separarObservacoes } from '../config/revisaoPeca';
+import { maritacaChat, isMaritacaConfigured, MARITACA_MODEL, maritacaCompletion } from './maritaca.service';
 import fs from 'fs';
 import path from 'path';
 
@@ -131,12 +132,50 @@ const withGeminiFallback = async <T>(run: (geminiModel: GenerativeModel) => Prom
 };
 
 /**
+ * Revisão automática de uma peça antes de entregar (Relatório 4): corrige palavras em
+ * inglês e garante a seção "Observações (não integram a peça)". A tradução por modelo
+ * só roda se ainda houver tempo na requisição (`deadline`, em ms desde 1970).
+ * Nunca derruba a geração: em qualquer erro, devolve o texto com as correções fixas.
+ */
+export const revisarPeca = async (text: string, deadline?: number): Promise<string> => {
+  if (!text) return text;
+  let out = corrigirIdiomaDicionario(text).text;
+  try {
+    const restantes = findForeignWords(out);
+    const sobra = (deadline ?? Date.now() + 20000) - Date.now();
+    if (restantes.length > 0 && sobra > 6000) {
+      const timeoutMs = Math.min(12000, sobra - 3000);
+      const pedido = promptTraducao(restantes, out);
+      let resposta = '';
+      if (isMaritacaConfigured()) {
+        resposta = await maritacaCompletion([{ role: 'user', content: pedido }], { temperature: 0, maxTokens: 600, timeoutMs });
+      } else {
+        const result: any = await Promise.race([
+          genAI.getGenerativeModel({ model: GEMINI_MODEL }).generateContent({
+            contents: [{ role: 'user', parts: [{ text: pedido }] }],
+            generationConfig: { ...NO_THINKING, temperature: 0, maxOutputTokens: 600 },
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('revisão de idioma: tempo esgotado')), timeoutMs)),
+        ]);
+        resposta = result.response.text();
+      }
+      const json = resposta.match(/\{[\s\S]*\}/);
+      if (json) out = aplicarTraducoes(out, restantes, JSON.parse(json[0]));
+    }
+  } catch (error: any) {
+    console.error('[revisão] Revisão de idioma por modelo não concluída:', error?.message || error);
+  }
+  return separarObservacoes(out);
+};
+
+/**
  * Generate a legal response using Gemini AI
  * @param prompt User's legal question or request
  * @param context Additional context (previous conversation, document content, etc.)
  * @returns The AI-generated response
  */
-export const generateLegalResponse = async (prompt: string, context?: any, mode: AiMode = 'informativo'): Promise<string> => {
+export const generateLegalResponse = async (prompt: string, context?: any, mode: AiMode = 'informativo', deadline?: number): Promise<string> => {
+  const startedAt = Date.now();
   try {
     // Prepare the prompt with context if available
     let fullPrompt = prompt;
@@ -166,7 +205,8 @@ export const generateLegalResponse = async (prompt: string, context?: any, mode:
       }).sendMessage(fullPrompt)
     );
     const response = result.response;
-    return response.text();
+    // Peças passam pela revisão de idioma e de Observações (a rota comum tem 55 s)
+    return mode === 'peca' ? await revisarPeca(response.text(), deadline ?? startedAt + 50000) : response.text();
   } catch (error) {
     throw new Error('Falha ao gerar a resposta do modelo de IA');
   }
@@ -210,6 +250,63 @@ export const analyzeLegalDocument = async (documentContent: string, options?: an
  * @param filters Optional filters for the search
  * @returns Enhanced search results with AI insights
  */
+// Pesquisa: a reserva entra após 15 s sem resposta; o conjunto tem até 75 s (a rota tem 90 s)
+const SEARCH_HEDGE_DELAY_MS = 15000;
+const SEARCH_TOTAL_MS = 75000;
+
+/**
+ * Devolve a primeira resposta útil (texto com pelo menos 80 caracteres) entre o provedor
+ * principal e o de reserva. A reserva começa depois de `hedgeDelayMs` ou imediatamente,
+ * se o principal falhar. Falha só quando os dois falham ou o tempo total se esgota.
+ */
+export const firstGoodAnswer = (
+  primary: () => Promise<string>,
+  backup: (() => Promise<string>) | null,
+  hedgeDelayMs: number,
+  totalMs: number
+): Promise<string> =>
+  new Promise<string>((resolve, reject) => {
+    let settled = false;
+    let pending = 0;
+    let backupStarted = false;
+    let lastError: any = new Error('Nenhum provedor respondeu');
+    const timers: NodeJS.Timeout[] = [];
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      timers.forEach(clearTimeout);
+      fn();
+    };
+
+    const run = (name: string, task: () => Promise<string>) => {
+      pending++;
+      task()
+        .then((text) => {
+          if (String(text || '').trim().length < 80) throw new Error(`${name}: resposta vazia ou curta demais`);
+          finish(() => resolve(text));
+        })
+        .catch((error) => {
+          lastError = error;
+          console.error(`[pesquisa] ${name} falhou:`, error?.status || '', error?.message || error);
+          pending--;
+          if (!backupStarted) startBackup();
+          else if (pending === 0) finish(() => reject(lastError));
+        });
+    };
+
+    const startBackup = () => {
+      if (backupStarted || settled) return;
+      backupStarted = true;
+      if (backup) run('reserva', backup);
+      else if (pending === 0) finish(() => reject(lastError));
+    };
+
+    run('principal', primary);
+    timers.push(setTimeout(startBackup, hedgeDelayMs));
+    timers.push(setTimeout(() => finish(() => reject(new Error('Pesquisa: tempo total esgotado'))), totalMs));
+  });
+
 export const aiEnhancedLegalSearch = async (query: string, filters?: Record<string, any>): Promise<any> => {
   try {
     // Construct a prompt for concise, scannable results
@@ -243,25 +340,29 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
       maxOutputTokens: 2048, // Shorter to encourage conciseness
     };
 
-    let responseText: string;
-    try {
+    // As sugestões de aprofundamento só dependem da pergunta: começam junto com a resposta
+    const followUpsPromise = generateFollowUpPrompts(query, '');
+
+    // Gemini e Maritaca em paralelo escalonado: se o Gemini falhar ou demorar mais de
+    // SEARCH_HEDGE_DELAY_MS, a Maritaca começa também, e vale a primeira resposta boa.
+    // Antes a Maritaca só entrava depois de todas as tentativas do Gemini, e a soma
+    // estourava o limite da requisição (falha intermitente apontada no Relatório 4).
+    const fromGemini = async (): Promise<string> => {
       const result = await withGeminiFallback((geminiModel) => geminiModel.generateContent({
         contents: [{ role: "user", parts: [{ text: searchEnhancementPrompt }] }],
         generationConfig,
       }));
-      responseText = result.response.text();
-    } catch (geminiError: any) {
-      // Gemini indisponível (por exemplo, "high demand"): a pesquisa usa a Maritaca como reserva
-      if (!isMaritacaConfigured()) throw geminiError;
-      console.error('[pesquisa] Gemini indisponível, usando a Maritaca:', geminiError?.status || '', geminiError?.message || geminiError);
-      responseText = await maritacaChat(searchEnhancementPrompt, { languageLevel: 'regular' });
-    }
+      return result.response.text();
+    };
+    const fromMaritaca = isMaritacaConfigured()
+      ? () => maritacaChat(searchEnhancementPrompt, { languageLevel: 'regular', timeoutMs: 45000 })
+      : null;
+    const responseText = await firstGoodAnswer(fromGemini, fromMaritaca, SEARCH_HEDGE_DELAY_MS, SEARCH_TOTAL_MS);
 
     // Format the response with HTML tags
     const formattedResponse = processResponseForDisplay(responseText);
 
-    // Generate follow-up prompts based on the original query and response
-    const followUpPrompts = await generateFollowUpPrompts(query, responseText);
+    const followUpPrompts = await followUpsPromise;
 
     return {
       enhancedQuery: formattedResponse,
@@ -592,6 +693,7 @@ export const generateChatResponse = async (
 ): Promise<string> => {
   // Pedido de peça usa o modo peça; as demais perguntas, o modo informativo
   const mode = chatMode(prompt);
+  const chatStartedAt = Date.now();
   // Mensagens de texto vão primeiro para a Maritaca (padrão). Arquivos (PDF/imagem)
   // e qualquer falha da Maritaca seguem para o Gemini, que funciona como reserva.
   if (CHAT_PROVIDER === 'maritaca' && isMaritacaConfigured() && !options.context?.inlineData) {
@@ -602,7 +704,7 @@ export const generateChatResponse = async (
         chatHistory: options.chatHistory,
         mode,
       });
-      return formatResponseToHTML(text);
+      return formatResponseToHTML(mode === 'peca' ? await revisarPeca(text, chatStartedAt + 50000) : text);
     } catch (maritacaError: any) {
       console.error(`[maritaca] Falha (modelo ${MARITACA_MODEL}), usando o Gemini como reserva:`, maritacaError?.message || maritacaError);
     }
@@ -777,7 +879,8 @@ export const generateChatResponse = async (
       const response = result.response;
 
       // Process the text to convert markdown-like syntax to HTML
-      let formattedResponse = formatResponseToHTML(response.text());
+      const rawText = response.text();
+      let formattedResponse = formatResponseToHTML(mode === 'peca' ? await revisarPeca(rawText, chatStartedAt + 52000) : rawText);
 
       return formattedResponse;
     } catch (apiError: any) {
@@ -992,6 +1095,7 @@ export const generateContentWithFile = async (
 
 export default {
   generateLegalResponse,
+  revisarPeca,
   analyzeLegalDocument,
   aiEnhancedLegalSearch,
   generateChatResponse,
