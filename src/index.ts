@@ -151,7 +151,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-13-relatorio-4',
+    version: '2026-11-20-relatorio-5',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,

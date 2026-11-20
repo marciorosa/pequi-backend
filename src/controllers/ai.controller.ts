@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../types';
 import geminiService from '../services/gemini.service';
-import { chatMode } from '../config/aiRules';
+import { chatMode, citationWarningHTML } from '../config/aiRules';
 import { buildLimpaNomePrompt, LimpaNomeData } from '../config/limpaNome';
 import { maritacaChat, isMaritacaConfigured } from '../services/maritaca.service';
 import User from '../models/user.model';
@@ -621,7 +621,11 @@ export const createDocument = async (req: AuthRequest, res: Response) => {
     
     // Call the Gemini service for document creation
     // Documento é peça: modo peça e autoauditoria completa
-    const documentContent = await geminiService.generateLegalResponse(prompt, undefined, 'peca');
+    const generatedText = await geminiService.generateLegalResponse(prompt, undefined, 'peca');
+    // Quadro "Confira estas citações" também na Redação profissional (Relatório 5): lista
+    // súmulas, julgados, artigos e leis citados para o advogado conferir número e conteúdo
+    const warning = citationWarningHTML(generatedText);
+    const documentContent = warning ? `${generatedText}\n\n${warning}` : generatedText;
     
     const title = `${documentType} - ${templateStyle}`;
     const savedDocument = await LegalDocument.create({

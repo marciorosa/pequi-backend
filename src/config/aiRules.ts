@@ -24,6 +24,7 @@ Trate como proibido, sempre:
 (b) Citar súmula, enunciado, tese ou julgado sem enunciar, logo em seguida, o seu conteúdo essencial. Se não consegue dizer o conteúdo, não cite o número.
 (c) Texto entre aspas atribuído a lei, súmula, julgado ou autor sem certeza de fidelidade literal. Na dúvida, parafraseie sem aspas.
 (d) Afirmar como existente qualquer lei, dispositivo, súmula, enunciado, tese, julgado, autor ou obra de cuja existência você não tenha certeza.
+(e) Citar um artigo de lei real para sustentar uma proposição de que ele não trata. Antes de citar um artigo, confirme que o conteúdo dele sustenta exatamente aquela afirmação; se não tiver certeza do encaixe entre o número e a proposição, descreva a regra sem o número. Exemplo de erro: fundamentar a solidariedade do IPTU perante o Fisco no art. 1.326 do Código Civil, que trata da partilha dos frutos da coisa comum.
 Quando faltar segurança sobre uma base, descreva o entendimento em termos gerais, sem número e sem aspas, e sinalize que o ponto precisa ser conferido em fonte oficial. Melhor uma orientação correta sem número do que um número inventado.
 
 ## 3. Afirmações jurídicas assertivas
@@ -34,7 +35,7 @@ Também não apresente como presunção legal, entendimento "pacífico", "consol
 Use apenas os fatos informados pelo usuário. Nunca invente partes, datas, valores, documentos, provas, benfeitorias ou acontecimentos. Se faltar um fato necessário, pergunte ou deixe um campo [PREENCHER]. Um campo [PREENCHER] é a resposta correta; inventar um fato é erro grave. Prefira sempre o campo em branco à suposição.
 
 ## 5. Atualidade
-O Direito muda e o seu conhecimento pode estar defasado. Não apresente como regra atual um entendimento que possa ter sido superado. Em temas de alta litigiosidade ou de mudança recente, diga que o ponto pode ter evoluído e oriente a conferir a situação vigente. Exemplo: em planos de saúde e tratamentos fora do rol da ANS, o STF, na ADI 7265 (julgada em setembro de 2025), interpretou a Lei 14.454/2022 e fixou critérios cumulativos, com efeito vinculante, para a cobertura fora do rol; não apresente a posição anterior do STJ (2022) como regra atual e oriente a conferir os critérios no site do STF.
+O Direito muda e o seu conhecimento pode estar defasado. Não apresente como regra atual um entendimento que possa ter sido superado. Em temas de alta litigiosidade ou de mudança recente, diga que o ponto pode ter evoluído e oriente a conferir a situação vigente. Exemplo: em planos de saúde e tratamentos fora do rol da ANS, o STF, na ADI 7265 (julgada em setembro de 2025), interpretou a Lei 14.454/2022 e fixou critérios cumulativos, com efeito vinculante, para a cobertura fora do rol. São cinco requisitos, todos necessários: (1) prescrição por médico ou odontólogo assistente habilitado; (2) inexistência de negativa expressa da ANS e de análise pendente de proposta de atualização do rol; (3) inexistência de alternativa terapêutica adequada já prevista no rol; (4) comprovação de eficácia e segurança do tratamento com base em medicina baseada em evidências de alto nível; (5) registro do medicamento ou produto na Anvisa. Não apresente a posição anterior do STJ (2022) como regra atual nem as hipóteses alternativas da redação original da Lei 14.454/2022 (como a recomendação da Conitec ou de órgão estrangeiro) como requisitos vigentes, e oriente a conferir os critérios no site do STF.
 
 ## 6. Redação (norma culta e padrão jurídico)
 A resposta deve parecer escrita por um redator humano competente, na norma culta e no registro jurídico adequado.
@@ -81,7 +82,7 @@ Antes de entregar qualquer resposta, revise-a na postura de um auditor externo c
 
 const GRUPO_A_COMUM = `## Grupo A: checagens de forma (confiáveis)
 1. Números de lei, súmula, enunciado, tese ou julgado incompletos, aproximados ou com lacuna: remova.
-2. Toda súmula, enunciado, tese ou julgado citado traz o seu conteúdo enunciado? Se não, retire o número e descreva em termos gerais.
+2. Toda súmula, enunciado, tese ou julgado citado traz o seu conteúdo enunciado? Se não, retire o número e descreva em termos gerais. Todo artigo de lei citado trata de fato daquilo que a frase afirma? Se não tiver certeza do encaixe, retire o número e descreva a regra.
 3. Aspas atribuídas a norma, julgado ou autor sem certeza de fidelidade: converta em paráfrase.
 4. Fatos não informados pelo usuário: converta em [PREENCHER].`;
 
@@ -214,6 +215,30 @@ export const findAssertions = (text: string): string[] => {
   return found.slice(0, 8);
 };
 
+// Artigos de lei citados (Relatório 5): o número pode existir e não tratar do que o texto afirma
+const DIPLOMA = String.raw`(?:C[óo]digo\s+(?:Civil|de\s+Processo\s+Civil|de\s+Defesa\s+do\s+Consumidor|Tribut[áa]rio\s+Nacional|Penal|de\s+Processo\s+Penal)|Constitui[çc][ãa]o(?:\s+Federal)?|CF(?:\/88)?|CC(?:\/2002)?|CPC(?:\/2015)?|CDC|CTN|CLT|CPP|CP|ECA|LGPD|Lei\s+(?:Complementar\s+)?(?:n[º°.]*\s*)?\d[\d.]*\/\d{2,4})`;
+const ARTICLE_PATTERN = new RegExp(
+  String.raw`\b(?:arts?\.|artigos?)\s*\d[\d.]*(?:º|°|o)?(?:-[A-Z])?` +
+    String.raw`(?:\s*,\s*(?:§\s*\d+º?|[IVXLC]+\b|par[áa]grafo\s+[úu]nico|caput|incisos?\s+[IVXLC]+))*` +
+    String.raw`(?:\s*(?:,|e|a)\s*\d[\d.]*(?:º|°)?)*` +
+    String.raw`(?:\s*,?\s*(?:d[oa]s?|da)\s+${DIPLOMA})?`,
+  'gi'
+);
+const LAW_PATTERN = /\bLei\s+(?:Complementar\s+)?(?:n[º°.]*\s*)?\d[\d.]*\/\d{2,4}/gi;
+
+/** Lista os artigos de lei e as leis citados no texto (sem repetição). */
+export const findLegalProvisions = (text: string): string[] => {
+  const plain = toPlain(text);
+  const found: string[] = [];
+  const articles = plain.match(ARTICLE_PATTERN) || [];
+  for (const match of articles) uniquePush(found, match.replace(/\s+/g, ' '));
+  // Leis citadas sem artigo (as que já aparecem junto de um artigo não se repetem)
+  for (const match of plain.match(LAW_PATTERN) || []) {
+    if (!found.some((f) => f.toLowerCase().includes(match.toLowerCase()))) uniquePush(found, match);
+  }
+  return found.slice(0, 25);
+};
+
 /** Lista os prazos com número cravado encontrados no texto (sem repetição). */
 export const findDeadlines = (text: string): string[] => {
   const found: string[] = [];
@@ -229,12 +254,14 @@ export const citationWarningHTML = (text: string): string => {
   const citations = findCitations(text);
   const deadlines = findDeadlines(text);
   const assertions = findAssertions(text);
-  if (citations.length === 0 && deadlines.length === 0 && assertions.length === 0) return '';
+  const provisions = findLegalProvisions(text);
+  if (citations.length === 0 && deadlines.length === 0 && assertions.length === 0 && provisions.length === 0) return '';
   const list = (items: string[]) => `<ul>${items.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>`;
   const parts = [
     '<div class="citation-check"><p><strong>Confira estas citações e prazos antes de usar.</strong> A IA pode errar números, conteúdos e prazos. Verifique cada ponto abaixo em fonte oficial (planalto.gov.br, stf.jus.br, stj.jus.br, cnj.jus.br, sites dos tribunais). Este aviso não faz parte do texto acima.</p>',
   ];
-  if (citations.length > 0) parts.push(`<p>Citações:</p>${list(citations)}`);
+  if (citations.length > 0) parts.push(`<p>Súmulas, enunciados e julgados:</p>${list(citations)}`);
+  if (provisions.length > 0) parts.push(`<p>Artigos e leis (confira se cada número trata mesmo do que o texto afirma):</p>${list(provisions)}`);
   if (deadlines.length > 0) parts.push(`<p>Prazos:</p>${list(deadlines)}`);
   if (assertions.length > 0) parts.push(`<p>Afirmações que precisam de fundamento (presunções e entendimentos ditos pacíficos):</p>${list(assertions)}`);
   parts.push('</div>');
