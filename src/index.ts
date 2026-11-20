@@ -151,7 +151,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-20-relatorio-5',
+    version: '2026-11-20-area-admin',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
@@ -200,6 +200,7 @@ import contactRoutes from './routes/contact.routes';
 import vaultRoutes from './routes/vault.routes';
 import workflowRoutes from './routes/workflow.routes';
 import webhookRoutes from './routes/webhook.routes';
+import adminRoutes from './routes/admin.routes';
 
 // Register routes (served under /api and also without the prefix, so the
 // frontend works whether NEXT_PUBLIC_API_URL ends in /api or not)
@@ -214,6 +215,7 @@ const routes: Array<[string, express.Router]> = [
   ['/vault', vaultRoutes],
   ['/workflows', workflowRoutes],
   ['/webhooks', webhookRoutes],
+  ['/admin', adminRoutes],
 ];
 for (const [path, router] of routes) {
   app.use([`/api${path}`, path], router);

@@ -2,13 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest, IUser } from '../types';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import User from '../models/user.model';
 
 dotenv.config();
 
 /**
  * Middleware to validate JWT token and add user info to request
  */
-export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Get token from Authorization header
   const authHeader = req.headers.authorization;
 
@@ -36,8 +38,22 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
       subscriptionId: (decoded as any).subscriptionId
     };
 
-    next();
   } catch (error) {
     return res.status(401).json({ message: 'Token inválido ou expirado' });
   }
+
+  // Conta bloqueada pela administração perde o acesso na hora, mesmo com o token válido.
+  // Se o banco não responder, a requisição segue (a rota em si vai tratar a falha).
+  try {
+    const status = mongoose.connection.readyState === 1
+      ? await User.findById(req.user!.id).select('blocked').lean()
+      : null;
+    if (status && (status as any).blocked) {
+      return res.status(403).json({ message: 'Esta conta está bloqueada. Fale com o suporte do Pequi.', blocked: true });
+    }
+  } catch {
+    // segue
+  }
+
+  next();
 }; 

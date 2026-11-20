@@ -17,6 +17,12 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
   usageCycleStart?: Date;
+  /** Pro de cortesia concedido pela administração, válido até esta data */
+  complimentaryProUntil?: Date;
+  /** Conta bloqueada pela administração: não entra nem usa a API */
+  blocked?: boolean;
+  blockedReason?: string;
+  lastLoginAt?: Date;
   apiUsage: {
     searchCount: number;
     chatCount: number;
@@ -83,6 +89,20 @@ const userSchema = new Schema<IUser>(
     },
     // Início do ciclo de cobrança em que os contadores de uso foram zerados pela última vez (plano Pro)
     usageCycleStart: {
+      type: Date
+    },
+    complimentaryProUntil: {
+      type: Date
+    },
+    blocked: {
+      type: Boolean,
+      default: false
+    },
+    blockedReason: {
+      type: String,
+      trim: true
+    },
+    lastLoginAt: {
       type: Date
     },
     apiUsage: {

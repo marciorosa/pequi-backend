@@ -106,6 +106,12 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       throw new AuthError('Credenciais inválidas');
     }
 
+    if (user.blocked) {
+      return res.status(403).json({ message: 'Esta conta está bloqueada. Fale com o suporte do Pequi.' });
+    }
+
+    await User.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } }).catch(() => undefined);
+
     const token = jwt.sign(
       { id: user._id, email: user.email },
       process.env.JWT_SECRET as string,

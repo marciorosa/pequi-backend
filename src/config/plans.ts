@@ -68,9 +68,14 @@ export interface ResolvedPlan {
 }
 
 /** Descobre o plano real do usuário a partir da assinatura gravada no banco */
-export const resolvePlan = async (user: { email?: string; subscriptionId?: any }): Promise<ResolvedPlan> => {
+export const resolvePlan = async (user: { email?: string; subscriptionId?: any; role?: string; complimentaryProUntil?: Date | null }): Promise<ResolvedPlan> => {
   let tier: PlanTier = 'free';
   let subscription: any = null;
+
+  // Pro de cortesia dado pela área administrativa
+  if (user.complimentaryProUntil && new Date(user.complimentaryProUntil).getTime() > Date.now()) {
+    tier = 'pro';
+  }
 
   if (user.subscriptionId) {
     const sub = await Subscription.findById(user.subscriptionId);
@@ -81,7 +86,7 @@ export const resolvePlan = async (user: { email?: string; subscriptionId?: any }
     }
   }
 
-  return { tier, isAdmin: isAdminEmail(user.email), subscription };
+  return { tier, isAdmin: isAdminEmail(user.email) || user.role === 'admin', subscription };
 };
 
 export const getLimit = (plan: ResolvedPlan, feature: FeatureType): number =>
