@@ -35,6 +35,7 @@ import { sendWorkflowEmail } from '../services/email.service';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors';
+import { PLAN_LIMITS, PLAN_FEATURES } from '../config/plans';
 
 export interface TenantRequest extends AuthRequest {
   tenant?: ITenant;
@@ -160,6 +161,40 @@ const adminView = async (t: ITenant) => {
   };
 };
 
+/**
+ * Planos padrão do escritório: os mesmos preços e limites do Pro do Pequi
+ * (R$ 399/mês e R$ 3.999/ano).
+ * Se o Stripe falhar, o plano fica salvo e vai para o Stripe ao ser editado ou na primeira compra.
+ */
+const DEFAULT_PLANS = [
+  { name: 'Pro mensal', priceCents: 39900, interval: 'month' as const, description: 'Acesso completo à assistente jurídica, com cobrança mensal.' },
+  { name: 'Pro anual', priceCents: 399900, interval: 'year' as const, description: 'Acesso completo à assistente jurídica, com cobrança anual.' },
+];
+
+export const ensureDefaultPlans = async (t: ITenant): Promise<number> => {
+  // Só para escritórios que ainda não têm nenhum plano: depois disso, os planos são
+  // do escritório (ele altera, desativa ou cria outros) e nunca são recriados
+  if (await TenantPlan.exists({ tenantId: t._id })) return 0;
+  const limits = Object.fromEntries(
+    Object.entries(PLAN_LIMITS.pro).map(([k, v]) => [k, Number.isFinite(v) ? v : null])
+  );
+  let created = 0;
+  for (const d of DEFAULT_PLANS) {
+    const plan = await TenantPlan.create({ ...d, tenantId: t._id, limits, features: PLAN_FEATURES.pro, active: true });
+    created += 1;
+    await syncPlanPrice(plan, t).catch((e) => console.error('[tenant] Plano padrão salvo sem o Stripe:', e?.message || e));
+  }
+  return created;
+};
+
+/** Na subida da API: dá os planos padrão aos escritórios já cadastrados que ainda não têm planos */
+export const backfillDefaultPlans = async () => {
+  const tenants = await Tenant.find({});
+  let total = 0;
+  for (const t of tenants) total += await ensureDefaultPlans(t).catch(() => 0);
+  if (total) console.log(`[startup] Planos padrão criados: ${total}`);
+};
+
 /* ------------------------------------ admin ------------------------------------ */
 
 /** GET /admin/tenants */
@@ -207,6 +242,8 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     await t.validate();
     const inviteLink = await linkOwner(t, b.ownerEmail);
     await t.save();
+    // Todo escritório novo já nasce com os planos padrão (iguais ao Pro do Pequi)
+    await ensureDefaultPlans(t).catch((e) => console.error('[tenant] Falha nos planos padrão:', e?.message || e));
     clearTenantCache();
     log(req, 'tenantCreate', `${t.name} (${t.slug})`);
     res.status(201).json({ tenant: await adminView(t), inviteLink });

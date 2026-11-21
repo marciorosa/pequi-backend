@@ -143,6 +143,10 @@ const connectToMongo = (): void => {
   }).then(() => {
     lastDbError = null;
     console.log('[startup] MongoDB conectado');
+    // White-label: escritórios sem planos recebem os planos padrão (iguais ao Pro do Pequi)
+    import('./controllers/tenant.controller')
+      .then((m) => m.backfillDefaultPlans())
+      .catch((e) => console.error('[startup] Falha nos planos padrão:', e?.message || e));
   }).catch((err) => {
     // Never expose credentials that could appear inside a connection string
     lastDbError = String(err?.message || err).replace(/mongodb(\+srv)?:\/\/[^@\s]*@/g, 'mongodb://***@');
@@ -165,7 +169,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-21-white-label-2',
+    version: '2026-11-21-white-label-3',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
