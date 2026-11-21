@@ -30,9 +30,10 @@ const LANGUAGE_INSTRUCTION = 'IDIOMA: escreva a resposta inteira em português d
 const instructionsFor = (mode: AiMode): string => `${LANGUAGE_INSTRUCTION}\n\n${aiInstructions(mode)}`;
 
 // Modo informativo: Chat, Pesquisa e análise de documentos
-const PT_BR_INSTRUCTION = instructionsFor('informativo');
+// Funções (e não constantes): a marca do escritório (white-label) muda a cada requisição
+const PT_BR_INSTRUCTION = () => instructionsFor('informativo');
 // Modo peça: criação de documentos, contratos e pedidos de peça no Chat
-const PECA_INSTRUCTION = instructionsFor('peca');
+const PECA_INSTRUCTION = () => instructionsFor('peca');
 
 // Configure safety settings
 const safetySettings = [
@@ -188,7 +189,7 @@ export const generateLegalResponse = async (prompt: string, context?: any, mode:
       }
     }
 
-    fullPrompt += `\n\n${mode === 'peca' ? PECA_INSTRUCTION : PT_BR_INSTRUCTION}`;
+    fullPrompt += `\n\n${mode === 'peca' ? PECA_INSTRUCTION() : PT_BR_INSTRUCTION()}`;
 
     // Generate response
     const result = await withGeminiFallback((geminiModel) =>
@@ -224,7 +225,7 @@ export const analyzeLegalDocument = async (documentContent: string, options?: an
     ${options?.focus ? `${options.focus}\n\n` : ''}
     ${documentContent}
 
-    ${PT_BR_INSTRUCTION}
+    ${PT_BR_INSTRUCTION()}
     `;
 
     const result = await model.generateContent(documentAnalysisPrompt);
@@ -328,7 +329,7 @@ export const aiEnhancedLegalSearch = async (query: string, filters?: Record<stri
 
     PRECISÃO: você não tem acesso a processos nem a bases de jurisprudência. Nunca invente números de processo, partes, decisões ou citações.
 
-    ${PT_BR_INSTRUCTION}
+    ${PT_BR_INSTRUCTION()}
     `;
 
     // Set generation config for consistent responses
@@ -844,7 +845,7 @@ export const generateChatResponse = async (
     }
 
     // Always answer in Brazilian Portuguese
-    const chatInstruction = mode === 'peca' ? PECA_INSTRUCTION : PT_BR_INSTRUCTION;
+    const chatInstruction = mode === 'peca' ? PECA_INSTRUCTION() : PT_BR_INSTRUCTION();
     if (parts.length > 0 && 'text' in parts[0]) {
       parts[0].text = `${parts[0].text}\n\n${chatInstruction}`;
     } else {
@@ -949,7 +950,7 @@ export const analyzeDocument = async (
           mimeType: mimeType
         }
       },
-      { text: `${analysisPrompt}\n\n${PT_BR_INSTRUCTION}` }
+      { text: `${analysisPrompt}\n\n${PT_BR_INSTRUCTION()}` }
     ];
 
     // Generate content with the file and prompt
@@ -1007,7 +1008,7 @@ export const compareDocuments = async (
           mimeType: mimeType2
         }
       },
-      { text: `${prompt}\n\n${PT_BR_INSTRUCTION}` }
+      { text: `${prompt}\n\n${PT_BR_INSTRUCTION()}` }
     ];
 
     // Generate content with both files and the comparison prompt
@@ -1083,7 +1084,7 @@ export const generateContentWithFile = async (
           fileUri: getFile.uri,
         },
       },
-      { text: `${prompt}\n\nResponda com formatação jurídica profissional (títulos e, quando útil, listas).\n\n${PT_BR_INSTRUCTION}` },
+      { text: `${prompt}\n\nResponda com formatação jurídica profissional (títulos e, quando útil, listas).\n\n${PT_BR_INSTRUCTION()}` },
     ]));
 
     const resText = result.response.text();
@@ -1126,7 +1127,7 @@ export const checkGemini = async (mode: 'basic' | 'chat' = 'basic', useFallback:
         generationConfig: { ...NO_THINKING, temperature: 0.7, topP: 0.95, topK: 64, maxOutputTokens: 8192 },
       });
       const started = Date.now();
-      const result = await chat.sendMessage([{ text: `O que é usucapião? Responda em uma frase.\n\n${PT_BR_INSTRUCTION}` }]);
+      const result = await chat.sendMessage([{ text: `O que é usucapião? Responda em uma frase.\n\n${PT_BR_INSTRUCTION()}` }]);
       return { ok: true, model: GEMINI_MODEL, keyConfigured, reply: `${result.response.text().trim()} (${Date.now() - started} ms)` };
     }
     const probe = genAI.getGenerativeModel({ model: probeModel });

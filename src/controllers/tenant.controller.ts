@@ -135,7 +135,8 @@ const linkOwner = async (t: ITenant, ownerEmail?: string): Promise<string | null
       resetPasswordExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const front = (process.env.FRONTEND_URL || 'https://pequi.me').split(',')[0].trim().replace(/\/$/, '');
-    inviteLink = `${front}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    // Link com ?tenant: a página de criar senha já abre com a marca do escritório
+    inviteLink = `${front}/reset-password?token=${token}&email=${encodeURIComponent(email)}&tenant=${t.slug}`;
   }
   owner.tenantId = t._id as any;
   owner.tenantRole = 'owner';

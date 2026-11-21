@@ -3,6 +3,13 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { ExternalServiceError } from '../utils/errors';
+import { Brand, currentBrand } from '../utils/brandContext';
+
+/**
+ * White-label: nos e-mails para contas de um escritório, o nome "Pequi" vira o nome do escritório.
+ * Sem marca (usuário do próprio Pequi), o texto fica igual.
+ */
+const branded = (text: string, brand: Brand | null): string => (brand ? text.replace(/Pequi/g, brand.name) : text);
 
 dotenv.config();
 
@@ -20,8 +27,9 @@ const transporter = nodemailer.createTransport({
  * @param to Recipient email address
  * @param resetLink Password reset link
  */
-export const sendPasswordResetEmail = async (to: string, resetLink: string): Promise<void> => {
-  const subject = 'Pequi - Redefinição de senha';
+export const sendPasswordResetEmail = async (to: string, resetLink: string, brandArg?: Brand | null): Promise<void> => {
+  const brand = brandArg === undefined ? currentBrand() : brandArg;
+  const subject = branded('Pequi - Redefinição de senha', brand);
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f7f7f7; border-radius: 5px;">
@@ -58,10 +66,10 @@ export const sendPasswordResetEmail = async (to: string, resetLink: string): Pro
 
   try {
     await transporter.sendMail({
-      from: `"Pequi" <${process.env.EMAIL_USER}>`,
+      from: branded(`"Pequi" <${process.env.EMAIL_USER}>`, brand),
       to,
       subject,
-      html,
+      html: branded(html, brand),
     });
   } catch (error) {
     throw new ExternalServiceError('Nodemailer', 'Falha ao enviar o e-mail de redefinição de senha', error);
@@ -402,7 +410,8 @@ export const sendDemoSchedulingEmail = async (demoData: {
 /**
  * Send workflow execution result email
  */
-export const sendWorkflowEmail = async (to: string, subject: string, content: string): Promise<void> => {
+export const sendWorkflowEmail = async (to: string, subject: string, content: string, brandArg?: Brand | null): Promise<void> => {
+  const brand = brandArg === undefined ? currentBrand() : brandArg;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f7f7f7; border-radius: 5px;">
       <div style="text-align: center; margin-bottom: 20px;">
@@ -430,10 +439,10 @@ export const sendWorkflowEmail = async (to: string, subject: string, content: st
 
   try {
     await transporter.sendMail({
-      from: `"Pequi Automações" <${process.env.EMAIL_USER}>`,
+      from: branded(`"Pequi Automações" <${process.env.EMAIL_USER}>`, brand),
       to,
       subject: `[Automação] ${subject}`,
-      html,
+      html: branded(html, brand),
     });
   } catch (error) {
     throw new ExternalServiceError('Nodemailer', 'Falha ao enviar o e-mail com o resultado do fluxo de trabalho', error);

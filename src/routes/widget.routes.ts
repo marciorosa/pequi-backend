@@ -22,6 +22,7 @@ import { hit, clientIp } from '../middleware/rateLimit.middleware';
 import { maritacaChat, isMaritacaConfigured } from '../services/maritaca.service';
 import geminiService, { formatResponseToHTML } from '../services/gemini.service';
 import { isAiFailureMessage } from '../controllers/ai.controller';
+import { runWithBrand } from '../utils/brandContext';
 
 const router = express.Router();
 router.use(express.json({ limit: '50kb' }));
@@ -196,16 +197,19 @@ router.post('/message', pequiCors, async (req: Request, res: Response) => {
   let reply = '';
   let isError = false;
   try {
-    if (isMaritacaConfigured()) {
-      reply = formatResponseToHTML(
-        await maritacaChat(message, { chatHistory: history, languageLevel: 'simple', extraSystem: officePrompt(tenant), maxTokens: 1200 })
-      );
-    } else {
-      reply = await geminiService.generateChatResponse(`${officePrompt(tenant)}\n\nMensagem do visitante: ${message}`, {
-        languageLevel: 'simple',
-        chatHistory: history,
-      });
-    }
+    // A IA se apresenta como assistente do escritório e não menciona o Pequi
+    await runWithBrand({ name: tenant.branding?.displayName || tenant.name, slug: tenant.slug }, async () => {
+      if (isMaritacaConfigured()) {
+        reply = formatResponseToHTML(
+          await maritacaChat(message, { chatHistory: history, languageLevel: 'simple', extraSystem: officePrompt(tenant), maxTokens: 1200 })
+        );
+      } else {
+        reply = await geminiService.generateChatResponse(`${officePrompt(tenant)}\n\nMensagem do visitante: ${message}`, {
+          languageLevel: 'simple',
+          chatHistory: history,
+        });
+      }
+    });
     isError = isAiFailureMessage(reply);
   } catch (error: any) {
     console.error('[widget] Falha da IA:', error?.message || error);

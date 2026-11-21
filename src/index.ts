@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { AppError } from './utils/errors';
 import { isPanelOrigin } from './services/tenant.service';
 import widgetRoutes from './routes/widget.routes';
+import { brandMiddleware } from './middleware/brand.middleware';
 
 // Load environment variables
 dotenv.config();
@@ -65,6 +66,9 @@ const corsOptions = {
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
+
+// White-label: a requisição de uma conta de escritório roda com a marca dele (IA e e-mails)
+app.use(brandMiddleware);
 
 // Widget white-label: vem antes do CORS geral porque /widget/config aceita os sites
 // cadastrados de cada escritório (CORS próprio, por chave pública)
@@ -169,7 +173,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-21-white-label-3',
+    version: '2026-11-21-white-label-4',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,

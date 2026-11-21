@@ -1,3 +1,4 @@
+import { currentBrand } from '../utils/brandContext';
 /**
  * Instruções da IA jurídica do Pequi (Gemini e Maritaca).
  *
@@ -144,10 +145,25 @@ Correto: "Pode-se sustentar que a ocupação do imóvel comum, tolerada pelo aut
  * Instruções completas para um modo: Núcleo, Exemplos, o modo e a autoauditoria
  * (que fica por último, por ser o último passo antes de entregar).
  */
-export const aiInstructions = (mode: AiMode = 'informativo'): string =>
-  mode === 'peca'
-    ? [NUCLEO, EXEMPLOS, MODO_PECA, AUTOAUDITORIA_COMPLETA].join('\n\n')
-    : [NUCLEO, EXEMPLOS, MODO_INFORMATIVO, AUTOAUDITORIA_ENXUTA].join('\n\n');
+const partes = (mode: AiMode) =>
+  mode === 'peca' ? [NUCLEO, EXEMPLOS, MODO_PECA, AUTOAUDITORIA_COMPLETA] : [NUCLEO, EXEMPLOS, MODO_INFORMATIVO, AUTOAUDITORIA_ENXUTA];
+
+/**
+ * Instruções completas. No painel de um escritório (white-label), a IA se apresenta como
+ * assistente do escritório e não menciona o Pequi.
+ */
+export const aiInstructions = (mode: AiMode = 'informativo'): string => {
+  const brand = currentBrand();
+  if (!brand) return partes(mode).join('\n\n');
+  const [nucleo, ...resto] = partes(mode);
+  const identidade = [
+    `## 0. Identidade`,
+    `Você é a assistente jurídica de inteligência artificial de "${brand.name}". Se perguntarem quem você é, quem a criou ou que ferramenta é esta, responda que é a assistente de ${brand.name}.`,
+    'Nunca mencione as palavras Pequi, Maritaca, Gemini ou o nome de qualquer outro fornecedor de tecnologia.',
+    `Quando o caso exigir análise individual, oriente a pessoa a falar com a equipe de ${brand.name}.`,
+  ].join('\n');
+  return [nucleo.replace('DA IA JURÍDICA DO PEQUI', `DA ASSISTENTE JURÍDICA DE ${brand.name.toUpperCase()}`), identidade, ...resto].join('\n\n');
+};
 
 // Pedido de redação de peça no Chat: verbo de redação + tipo de peça
 const DRAFT_VERB = /\b(redij[ao]|redigir|redija-?me|elabor(?:e|ar|a)|escrev(?:a|er)|fa[çc]a|fazer|prepar(?:e|ar)|mont(?:e|ar)|cri(?:e|ar)|gere|gerar|minut(?:e|ar))\b/i;

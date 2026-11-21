@@ -5,6 +5,7 @@ import User from '../models/user.model';
 import { sendWorkflowEmail } from '../services/email.service';
 import { DocuSignService } from '../services/docusign.service';
 import mongoose from 'mongoose';
+import { brandForUser } from '../middleware/brand.middleware';
 
 const router = Router();
 
@@ -82,6 +83,8 @@ router.post('/docusign', async (req: Request, res: Response) => {
                     await folder.save();
 
                     // 2. Notify the Lawyer via Email
+                    const brand = await brandForUser(user._id);
+                    const vaultUrl = `${String(process.env.FRONTEND_URL || '').split(',')[0].trim().replace(/\/$/, '')}/dashboard/vault${brand?.slug ? `?tenant=${brand.slug}` : ''}`;
                     await sendWorkflowEmail(
                         user.email,
                         '🖋️ Documento assinado com sucesso',
@@ -92,9 +95,10 @@ router.post('/docusign', async (req: Request, res: Response) => {
                             <p>Ótima notícia! O documento "<strong>${envelopeSummary.emailSubject}</strong>" foi assinado por todas as partes.</p>
                             <p>A versão final assinada foi salva automaticamente no seu <strong>Cofre Seguro</strong>, na pasta "${folder.name}".</p>
                             <br/>
-                            <a href="${process.env.FRONTEND_URL}/dashboard/vault" style="background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver no Cofre</a>
+                            <a href="${vaultUrl}" style="background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver no Cofre</a>
                         </div>
-                        `
+                        `,
+                        brand
                     );
 
                 } else {

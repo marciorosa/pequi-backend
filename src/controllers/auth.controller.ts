@@ -15,6 +15,7 @@ import { s3Service } from '../services/s3.service';
 import { AuthError, ValidationError, NotFoundError, AppError } from '../utils/errors';
 import { resolvePlan, getUsage, limitsForJson, PLAN_FEATURES, ensureUsageCycle } from '../config/plans';
 import { findTenantBySlug } from '../services/tenant.service';
+import { brandForUser } from '../middleware/brand.middleware';
 
 dotenv.config();
 
@@ -270,8 +271,11 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     user.resetPasswordExpires = tokenExpiration;
     await user.save();
 
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}&email=${email}`;
-    await emailService.sendPasswordResetEmail(email, resetUrl);
+    // Conta de escritório (white-label): e-mail e página com a marca do escritório
+    const brand = await brandForUser(user._id);
+    const frontUrl = String(process.env.FRONTEND_URL || '').split(',')[0].trim().replace(/\/$/, '');
+    const resetUrl = `${frontUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}${brand?.slug ? `&tenant=${brand.slug}` : ''}`;
+    await emailService.sendPasswordResetEmail(email, resetUrl, brand);
 
     return res.status(200).json({
       message: 'Se existir uma conta com esse e-mail, enviamos um link para redefinir a senha'
