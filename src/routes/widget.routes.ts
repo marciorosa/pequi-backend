@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Tenant from '../models/tenant.model';
 import WidgetConversation from '../models/widgetConversation.model';
-import { findTenantByWidgetKey, isWidgetOriginAllowed, normalizeOrigin, publicTenant, panelUrl } from '../services/tenant.service';
+import { findTenantByWidgetKey, isWidgetOriginAllowed, normalizeOrigin, publicTenant, tenantPageUrl } from '../services/tenant.service';
 import { hit, clientIp } from '../middleware/rateLimit.middleware';
 import { maritacaChat, isMaritacaConfigured } from '../services/maritaca.service';
 import geminiService, { formatResponseToHTML } from '../services/gemini.service';
@@ -147,7 +147,7 @@ router.post('/session', pequiCors, async (req: Request, res: Response) => {
     expiresIn: TOKEN_TTL,
   });
 
-  res.json({ token, visitorId, tenant: publicTenant(tenant), state: conversationState(conv, tenant) });
+  res.json({ token, visitorId, tenant: publicTenant(tenant), state: conversationState(conv, tenant), plansUrl: tenantPageUrl(tenant, '/pricing') });
 });
 
 /* --------------------------------- mensagens --------------------------------- */
@@ -189,7 +189,7 @@ router.post('/message', pequiCors, async (req: Request, res: Response) => {
   let conv = await WidgetConversation.findOne({ tenantId: tenant._id, visitorId: claims.v });
   const state = conversationState(conv, tenant);
   if (state.gate !== 'none') {
-    return res.json({ gate: state.gate, state, plansUrl: `${panelUrl(tenant)}/assinar` });
+    return res.json({ gate: state.gate, state, plansUrl: tenantPageUrl(tenant, '/pricing') });
   }
   if (!conv) conv = new WidgetConversation({ tenantId: tenant._id, visitorId: claims.v, origin: claims.o, messages: [] });
 

@@ -154,6 +154,22 @@ export const panelUrl = (t: ITenant): string => {
   }
 };
 
+/**
+ * Endereço de uma página no painel do escritório.
+ * Com domínio próprio cadastrado: https://dominio/caminho.
+ * Sem domínio próprio: endereço do Pequi com ?tenant=slug (funciona sem configurar DNS).
+ */
+export const tenantPageUrl = (t: ITenant, path: string, query: Record<string, string> = {}): string => {
+  const own = t.domains?.panelDomains?.[0];
+  const params = new URLSearchParams(query);
+  if (!own) params.set('tenant', t.slug);
+  const qs = params.toString().replace('%7BCHECKOUT_SESSION_ID%7D', '{CHECKOUT_SESSION_ID}');
+  const base = own
+    ? panelUrl(t)
+    : (process.env.FRONTEND_URL || 'https://pequi.me').split(',')[0].trim().replace(/\/$/, '');
+  return `${base}${path}${qs ? `?${qs}` : ''}`;
+};
+
 /** Limpa a lista de domínios digitada no admin */
 export const cleanList = (values: any, kind: 'host' | 'origin'): string[] => {
   const arr = Array.isArray(values) ? values : String(values || '').split(/[\s,;]+/);

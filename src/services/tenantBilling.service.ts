@@ -17,7 +17,7 @@ import Subscription from '../models/subscription.model';
 import User from '../models/user.model';
 import { TenantEarning, TenantPayout } from '../models/tenantLedger.model';
 import { ValidationError, ExternalServiceError, AppError } from '../utils/errors';
-import { panelUrl } from './tenant.service';
+import { tenantPageUrl } from './tenant.service';
 
 let client: Stripe | null = null;
 export const stripeClient = (): Stripe => {
@@ -111,7 +111,6 @@ export const createClientCheckout = async (userId: string, planId: string) => {
       await user.save();
     }
 
-    const base = panelUrl(tenant);
     const meta = {
       userId: String(user._id),
       tenantId: String(tenant._id),
@@ -125,8 +124,8 @@ export const createClientCheckout = async (userId: string, planId: string) => {
       line_items: [{ price: plan.stripePriceId!, quantity: 1 }],
       subscription_data: { metadata: meta },
       metadata: meta,
-      success_url: `${base}/assinar?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${base}/assinar?canceled=true`,
+      success_url: tenantPageUrl(tenant, '/pricing', { success: 'true', session_id: '{CHECKOUT_SESSION_ID}' }),
+      cancel_url: tenantPageUrl(tenant, '/pricing', { canceled: 'true' }),
     });
     return { sessionId: session.id, url: session.url };
   });
