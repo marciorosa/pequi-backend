@@ -153,12 +153,35 @@ const linkOwner = async (t: ITenant, ownerEmail?: string): Promise<string | null
   return inviteLink;
 };
 
+/**
+ * Assinatura do escritório no Pequi (Pro R$ 399/mês ou R$ 3.999/ano), feita pela conta do responsável
+ * no checkout do Pequi. Não confundir com os planos que o escritório vende aos clientes.
+ */
+const pequiSubscriptionOf = async (t: any) => {
+  if (!t.ownerUserId) return { status: 'sem-responsavel' as const };
+  const owner: any = await User.findById(t.ownerUserId).select('subscriptionId complimentaryProUntil').lean();
+  const sub: any = owner?.subscriptionId ? await Subscription.findById(owner.subscriptionId).lean() : null;
+  if (sub && !sub.tenantPlanId) {
+    return {
+      status: sub.status as string,
+      plan: sub.plan === 'yearly' ? 'anual' : 'mensal',
+      currentPeriodEnd: sub.currentPeriodEnd,
+      cancelAtPeriodEnd: Boolean(sub.cancelAtPeriodEnd),
+    };
+  }
+  if (owner?.complimentaryProUntil && new Date(owner.complimentaryProUntil).getTime() > Date.now()) {
+    return { status: 'cortesia', currentPeriodEnd: owner.complimentaryProUntil };
+  }
+  return { status: 'sem-assinatura' as const };
+};
+
 const adminView = async (t: ITenant) => {
   const owner = t.ownerUserId ? await User.findById(t.ownerUserId).select('name email').lean() : null;
   return {
     ...t.toObject(),
     owner,
     panelUrl: panelUrl(t),
+    pequiSubscription: await pequiSubscriptionOf(t),
   };
 };
 
@@ -194,14 +217,19 @@ const createDefault = async (t: ITenant, d: (typeof DEFAULT_PLANS)[number]) => {
   return plan;
 };
 
-/** Escritório ainda com os planos padrão antigos (Pro mensal R$ 399 e Pro anual R$ 3.999), sem nenhuma alteração */
-const hasUntouchedOldDefaults = (plans: any[]) => {
-  if (plans.length !== 2) return false;
-  const m = plans.find((p) => p.name === 'Pro mensal' && p.priceCents === 39900 && p.interval === 'month' && p.active);
-  const a = plans.find((p) => p.name === 'Pro anual' && p.priceCents === 399900 && p.interval === 'year' && p.active);
+/**
+ * Escritório que só tem os planos padrão antigos (Pro mensal R$ 399 e/ou Pro anual R$ 3.999),
+ * com nome, preço e limites originais. Tirar um deles de venda não conta como alteração.
+ */
+const hasOnlyOldDefaults = (plans: any[]) => {
+  if (plans.length === 0 || plans.length > 2) return false;
   const proLimits = JSON.stringify(limitsOf(PRO));
-  const same = (p: any) => JSON.stringify(limitsOf(p.limits || {})) === proLimits;
-  return Boolean(m && a && same(m) && same(a));
+  return plans.every(
+    (p) =>
+      ((p.name === 'Pro mensal' && p.priceCents === 39900 && p.interval === 'month') ||
+        (p.name === 'Pro anual' && p.priceCents === 399900 && p.interval === 'year')) &&
+      JSON.stringify(limitsOf(p.limits || {})) === proLimits
+  );
 };
 
 export const ensureDefaultPlans = async (t: ITenant): Promise<number> => {
@@ -213,21 +241,18 @@ export const ensureDefaultPlans = async (t: ITenant): Promise<number> => {
     return DEFAULT_PLANS.length;
   }
 
-  // Ainda com os padrões antigos e sem alterações: troca pelos três novos.
-  // O "Pro mensal" vira o "Pro" (R$ 399,90; novo preço no Stripe) e o "Pro anual" sai de venda
-  // (quem já assinou continua no plano dele).
-  if (hasUntouchedOldDefaults(plans)) {
-    const mensal = plans.find((p) => p.name === 'Pro mensal')!;
-    const anual = plans.find((p) => p.name === 'Pro anual')!;
-    anual.active = false;
-    await anual.save();
-    await syncPlanPrice(anual, t).catch(() => undefined);
-    const pro = DEFAULT_PLANS.find((d) => d.name === 'Pro')!;
-    Object.assign(mensal, { name: pro.name, priceCents: pro.priceCents, description: pro.description, features: pro.features, limits: pro.limits, popular: false });
-    await mensal.save();
-    await syncPlanPrice(mensal, t).catch((e) => console.error('[tenant] Plano Pro salvo sem o Stripe:', e?.message || e));
-    for (const d of DEFAULT_PLANS.filter((x) => x.name !== 'Pro')) await createDefault(t, d);
-    return 2;
+  // Ainda com os padrões antigos: troca pelos três novos. Os antigos saem de venda
+  // (quem já assinou continua no plano dele) e entram Essencial, Avançado e Pro.
+  if (hasOnlyOldDefaults(plans)) {
+    for (const old of plans) {
+      if (old.active) {
+        old.active = false;
+        await old.save();
+        await syncPlanPrice(old, t).catch(() => undefined);
+      }
+    }
+    for (const d of DEFAULT_PLANS) await createDefault(t, d);
+    return DEFAULT_PLANS.length;
   }
 
   // O escritório já mexeu nos planos: nada muda
@@ -255,8 +280,10 @@ export const listTenants = async (req: AuthRequest, res: Response) => {
       WidgetConversation.aggregate([{ $match: { tenantId: { $in: ids }, 'lead.capturedAt': { $exists: true } } }, { $group: { _id: '$tenantId', n: { $sum: 1 } } }]),
     ]);
     const count = (arr: any[], id: any) => arr.find((x) => String(x._id) === String(id))?.n || 0;
+    const pequiSubs = await Promise.all(tenants.map((t) => pequiSubscriptionOf(t)));
     res.json({
-      tenants: tenants.map((t: any) => ({
+      tenants: tenants.map((t: any, i: number) => ({
+        pequiSubscription: pequiSubs[i],
         _id: t._id,
         name: t.name,
         slug: t.slug,
@@ -380,7 +407,13 @@ export const requireOwner = (req: TenantRequest, res: Response, next: NextFuncti
 export const officeSummary = async (req: TenantRequest, res: Response) => {
   const t = req.tenant!;
   res.json({
-    tenant: { ...publicTenant(t), commissionPercent: t.commissionPercent, pequiPlan: t.pequiPlan, widgetKey: t.widget.publicKey },
+    tenant: {
+      ...publicTenant(t),
+      commissionPercent: t.commissionPercent,
+      pequiPlan: t.pequiPlan,
+      widgetKey: t.widget.publicKey,
+      pequiSubscription: await pequiSubscriptionOf(t),
+    },
   });
 };
 
