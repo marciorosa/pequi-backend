@@ -119,9 +119,14 @@ export const maritacaChat = async (
     mode?: AiMode;
     maxTokens?: number;
     timeoutMs?: number;
+    /** Instruções extras de sistema (ex.: contexto do escritório no widget white-label) */
+    extraSystem?: string;
   } = {}
 ): Promise<string> => {
   const systemParts = [legalSystemPrompt(options.mode || 'informativo')];
+  if (options.extraSystem) {
+    systemParts.push(options.extraSystem);
+  }
   if (options.languageLevel && LEVEL_INSTRUCTIONS[options.languageLevel]) {
     systemParts.push(LEVEL_INSTRUCTIONS[options.languageLevel]);
   }

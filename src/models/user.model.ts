@@ -23,6 +23,9 @@ export interface IUser extends Document {
   blocked?: boolean;
   blockedReason?: string;
   lastLoginAt?: Date;
+  /** Escritório (white-label) ao qual a conta pertence. Sem valor = usuário comum do Pequi */
+  tenantId?: mongoose.Types.ObjectId;
+  tenantRole?: 'owner' | 'staff' | 'client';
   apiUsage: {
     searchCount: number;
     chatCount: number;
@@ -104,6 +107,15 @@ const userSchema = new Schema<IUser>(
     },
     lastLoginAt: {
       type: Date
+    },
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      index: true
+    },
+    tenantRole: {
+      type: String,
+      enum: ['owner', 'staff', 'client']
     },
     apiUsage: {
       searchCount: { type: Number, default: 0 },

@@ -2,6 +2,7 @@ import Subscription from '../models/subscription.model';
 import User from '../models/user.model';
 import VaultFolder from '../models/vault.model';
 import Workflow from '../models/workflow.model';
+import TenantPlan from '../models/tenantPlan.model';
 
 export type FeatureType = 'searchCount' | 'chatCount' | 'docsCount' | 'vaultFolderCount' | 'workflowCount';
 export type PlanTier = 'free' | 'pro' | 'enterprise';
@@ -65,7 +66,22 @@ export interface ResolvedPlan {
   tier: PlanTier;
   isAdmin: boolean;
   subscription: any | null;
+  /** Limites de um plano criado pelo escritório (white-label); substituem os de PLAN_LIMITS */
+  customLimits?: Record<FeatureType, number>;
+  /** Nome do plano do escritório, quando houver */
+  customPlanName?: string;
+  customFeatures?: string[];
 }
+
+/** Converte os limites gravados no TenantPlan (null = sem limite) para números */
+const tenantPlanLimits = (limits: any): Record<FeatureType, number> => {
+  const out = {} as Record<FeatureType, number>;
+  (Object.keys(PLAN_LIMITS.free) as FeatureType[]).forEach((f) => {
+    const v = limits?.[f];
+    out[f] = v === null || v === undefined ? Infinity : Number(v);
+  });
+  return out;
+};
 
 /** Descobre o plano real do usuário a partir da assinatura gravada no banco */
 export const resolvePlan = async (user: { email?: string; subscriptionId?: any; role?: string; complimentaryProUntil?: Date | null }): Promise<ResolvedPlan> => {
@@ -83,6 +99,21 @@ export const resolvePlan = async (user: { email?: string; subscriptionId?: any; 
       tier = 'pro';
       subscription = sub;
       // Se o Enterprise for criado no Stripe, defina tier = 'enterprise' conforme o priceId.
+
+      // Assinatura de um plano do escritório: valem os limites que o escritório cadastrou
+      if ((sub as any).tenantPlanId) {
+        const tp = await TenantPlan.findById((sub as any).tenantPlanId).lean();
+        if (tp) {
+          return {
+            tier,
+            isAdmin: isAdminEmail(user.email) || user.role === 'admin',
+            subscription,
+            customLimits: tenantPlanLimits((tp as any).limits),
+            customPlanName: (tp as any).name,
+            customFeatures: (tp as any).features || [],
+          };
+        }
+      }
     }
   }
 
@@ -90,7 +121,7 @@ export const resolvePlan = async (user: { email?: string; subscriptionId?: any; 
 };
 
 export const getLimit = (plan: ResolvedPlan, feature: FeatureType): number =>
-  plan.isAdmin ? Infinity : PLAN_LIMITS[plan.tier][feature];
+  plan.isAdmin ? Infinity : plan.customLimits ? plan.customLimits[feature] : PLAN_LIMITS[plan.tier][feature];
 
 export const canUseLawyer = (plan: ResolvedPlan, lawyerId?: string): boolean => {
   if (!lawyerId) return true;

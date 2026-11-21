@@ -14,6 +14,7 @@ import Subscription from '../models/subscription.model';
 import { s3Service } from '../services/s3.service';
 import { AuthError, ValidationError, NotFoundError, AppError } from '../utils/errors';
 import { resolvePlan, getUsage, limitsForJson, PLAN_FEATURES, ensureUsageCycle } from '../config/plans';
+import { findTenantBySlug } from '../services/tenant.service';
 
 dotenv.config();
 
@@ -41,9 +42,12 @@ const validateRegistrationInput = (name: string, email: string, password: string
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   const startTime = Date.now();
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, tenantSlug } = req.body;
 
     validateRegistrationInput(name, email, password);
+
+    // Cadastro feito no painel de um escritório (white-label): a conta vira cliente dele
+    const tenant = tenantSlug ? await findTenantBySlug(String(tenantSlug)) : null;
 
 
     const existingUser = await User.findOne({ email });
@@ -57,7 +61,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const user = new User({
       name,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      ...(tenant ? { tenantId: tenant._id, tenantRole: 'client' } : {})
     });
 
     await user.save();
@@ -162,19 +167,22 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
         jobTitle: user.jobTitle || '',
         phone: user.phone || '',
         image: user.image || '',
-        memberSince: user.createdAt
+        memberSince: user.createdAt,
+        // Escritório (white-label) da conta, quando houver
+        tenantId: user.tenantId || null,
+        tenantRole: user.tenantRole || null
       },
       // Pastas e fluxos são contados pelo que existe no banco, para bater com o Cofre e os Fluxos
       apiUsage: await getUsage(user),
       subscription: {
-        plan: planNames[plan.tier],
+        plan: plan.customPlanName || planNames[plan.tier],
         isAdmin: plan.isAdmin,
         status: sub ? sub.status : 'active',
         startDate: sub ? sub.currentPeriodStart : user.createdAt,
         nextBillingDate: sub ? sub.currentPeriodEnd : null,
         // null = sem limite (conta de administrador ou Enterprise)
         limits: limitsForJson(plan),
-        features: plan.isAdmin ? ['Conta de administrador: sem limites de uso, para testes e suporte'] : PLAN_FEATURES[plan.tier]
+        features: plan.isAdmin ? ['Conta de administrador: sem limites de uso, para testes e suporte'] : (plan.customFeatures || PLAN_FEATURES[plan.tier])
       }
     });
   } catch (error) {

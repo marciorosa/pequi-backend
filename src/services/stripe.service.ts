@@ -6,6 +6,7 @@ import User from '../models/user.model';
 import Subscription from '../models/subscription.model';
 import dotenv from 'dotenv';
 import { ExternalServiceError, ValidationError, NotFoundError, AppError } from '../utils/errors';
+import Tenant from '../models/tenant.model';
 
 dotenv.config();
 
@@ -265,17 +266,43 @@ export const stripeService = {
         throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
       }
 
-      const event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET!
-      );
+      // Eventos das contas conectadas (Connect) chegam por um endpoint com segredo próprio,
+      // que pode ser o mesmo endereço: tentamos os dois segredos
+      const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET].filter(Boolean) as string[];
+      let event: Stripe.Event | null = null;
+      let lastError: any = null;
+      for (const secret of secrets) {
+        try {
+          event = stripe.webhooks.constructEvent(req.body, sig, secret);
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      if (!event) throw lastError || new Error('Assinatura do webhook inválida');
 
 
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as Stripe.Checkout.Session;
-          await handleCheckoutSessionCompleted(session);
+          if (session.metadata?.tenantPlanId) {
+            // Assinatura de um cliente de escritório (white-label, com comissão via Connect)
+            const { recordClientCheckout } = await import('./connect.service');
+            await recordClientCheckout(session).catch((e) => console.error('[stripe] Falha ao gravar assinatura do escritório:', e?.message || e));
+          } else {
+            await handleCheckoutSessionCompleted(session);
+          }
+          break;
+        }
+
+        case 'account.updated': {
+          // Situação da conta conectada do escritório (cadastro concluído, recebimentos liberados)
+          const account = event.data.object as Stripe.Account;
+          const tenant = await Tenant.findOne({ 'stripe.accountId': account.id });
+          if (tenant) {
+            const { applyAccountStatus } = await import('./connect.service');
+            await applyAccountStatus(tenant, account);
+          }
           break;
         }
 
@@ -403,6 +430,9 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     existingSubscription.currentPeriodStart = new Date(subscription.current_period_start * 1000);
     existingSubscription.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
     existingSubscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+    if (subscription.application_fee_percent !== null && subscription.application_fee_percent !== undefined) {
+      existingSubscription.applicationFeePercent = subscription.application_fee_percent;
+    }
 
     if (subscription.items.data.length > 0) {
       existingSubscription.stripePriceId = subscription.items.data[0].price.id;

@@ -5,6 +5,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { AppError } from './utils/errors';
+import { isPanelOrigin } from './services/tenant.service';
+import widgetRoutes from './routes/widget.routes';
 
 // Load environment variables
 dotenv.config();
@@ -46,8 +48,16 @@ const corsOptions = {
       allowed.replace(/\/$/, '') === normalizedOrigin
     );
 
+    if (isAllowed) {
+      callback(null, true);
+      return;
+    }
+
+    // Painéis white-label dos escritórios (domínio próprio ou slug.pequi.me)
     // Not allowed: answer without CORS headers instead of throwing (a thrown error turned the preflight into a 500)
-    callback(null, isAllowed);
+    isPanelOrigin(normalizedOrigin)
+      .then((ok) => callback(null, ok))
+      .catch(() => callback(null, false));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -55,6 +65,10 @@ const corsOptions = {
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
+
+// Widget white-label: vem antes do CORS geral porque /widget/config aceita os sites
+// cadastrados de cada escritório (CORS próprio, por chave pública)
+app.use(['/api/widget', '/widget'], widgetRoutes);
 
 // Middleware
 app.use(cors(corsOptions));
@@ -151,7 +165,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-20-area-admin',
+    version: '2026-11-21-white-label',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
@@ -201,6 +215,7 @@ import vaultRoutes from './routes/vault.routes';
 import workflowRoutes from './routes/workflow.routes';
 import webhookRoutes from './routes/webhook.routes';
 import adminRoutes from './routes/admin.routes';
+import { tenantPublicRouter, officeRouter, tenantBillingRouter } from './routes/tenant.routes';
 
 // Register routes (served under /api and also without the prefix, so the
 // frontend works whether NEXT_PUBLIC_API_URL ends in /api or not)
@@ -216,6 +231,9 @@ const routes: Array<[string, express.Router]> = [
   ['/workflows', workflowRoutes],
   ['/webhooks', webhookRoutes],
   ['/admin', adminRoutes],
+  ['/tenants', tenantPublicRouter],
+  ['/office', officeRouter],
+  ['/tenant-billing', tenantBillingRouter],
 ];
 for (const [path, router] of routes) {
   app.use([`/api${path}`, path], router);

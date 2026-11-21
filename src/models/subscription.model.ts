@@ -10,6 +10,10 @@ export interface ISubscription extends Document {
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
   cancelAtPeriodEnd: boolean;
+  /** Assinatura de um plano do escritório (white-label) */
+  tenantId?: mongoose.Types.ObjectId;
+  tenantPlanId?: mongoose.Types.ObjectId;
+  applicationFeePercent?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +59,18 @@ const SubscriptionSchema: Schema = new Schema({
   cancelAtPeriodEnd: {
     type: Boolean,
     default: false
+  },
+  tenantId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true
+  },
+  tenantPlanId: {
+    type: Schema.Types.ObjectId,
+    ref: 'TenantPlan'
+  },
+  applicationFeePercent: {
+    type: Number
   }
 }, {
   timestamps: true
