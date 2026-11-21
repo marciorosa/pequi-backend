@@ -22,6 +22,8 @@ export interface ITenantPlan extends Document {
   features: string[];
   stripeProductId?: string;
   stripePriceId?: string;
+  /** Destaque "Mais popular" na página de planos */
+  popular: boolean;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -46,6 +48,7 @@ const TenantPlanSchema = new Schema<ITenantPlan>(
     features: { type: [String], default: [] },
     stripeProductId: { type: String },
     stripePriceId: { type: String },
+    popular: { type: Boolean, default: false },
     active: { type: Boolean, default: true },
   },
   { timestamps: true }

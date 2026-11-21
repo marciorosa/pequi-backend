@@ -163,32 +163,78 @@ const adminView = async (t: ITenant) => {
 };
 
 /**
- * Planos padrão do escritório: os mesmos preços e limites do Pro do Pequi
- * (R$ 399/mês e R$ 3.999/ano).
+ * Planos padrão dos escritórios (todos mensais):
+ *   Essencial R$ 99,90 · Avançado R$ 199,90 (mais popular) · Pro R$ 399,90 (limites do Pro do Pequi).
+ * Depois de criados, os planos são do escritório: ele altera, desativa ou cria outros.
  * Se o Stripe falhar, o plano fica salvo e vai para o Stripe ao ser editado ou na primeira compra.
  */
-const DEFAULT_PLANS = [
-  { name: 'Pro mensal', priceCents: 39900, interval: 'month' as const, description: 'Acesso completo à assistente jurídica, com cobrança mensal.' },
-  { name: 'Pro anual', priceCents: 399900, interval: 'year' as const, description: 'Acesso completo à assistente jurídica, com cobrança anual.' },
+const limitsOf = (l: Record<string, number>) => Object.fromEntries(Object.entries(l).map(([k, v]) => [k, Number.isFinite(v) ? v : null]));
+const featuresOf = (l: Record<string, number>, extra: string[] = []) => [
+  `Chat jurídico com IA (${l.chatCount} mensagens por mês)`,
+  `Pesquisa inteligente (${l.searchCount} pesquisas por mês)`,
+  'Todos os assistentes de IA',
+  `Operações com documentos (${l.docsCount} por mês)`,
+  `Cofre (${l.vaultFolderCount} pastas)`,
+  `Criador de fluxos (${l.workflowCount} ${l.workflowCount === 1 ? 'fluxo' : 'fluxos'})`,
+  ...extra,
 ];
+const ESSENCIAL = { searchCount: 15, chatCount: 15, docsCount: 10, vaultFolderCount: 10, workflowCount: 1 };
+const AVANCADO = { searchCount: 30, chatCount: 30, docsCount: 25, vaultFolderCount: 25, workflowCount: 3 };
+const PRO = PLAN_LIMITS.pro as Record<string, number>;
 
-export const ensureDefaultPlans = async (t: ITenant): Promise<number> => {
-  // Só para escritórios que ainda não têm nenhum plano: depois disso, os planos são
-  // do escritório (ele altera, desativa ou cria outros) e nunca são recriados
-  if (await TenantPlan.exists({ tenantId: t._id })) return 0;
-  const limits = Object.fromEntries(
-    Object.entries(PLAN_LIMITS.pro).map(([k, v]) => [k, Number.isFinite(v) ? v : null])
-  );
-  let created = 0;
-  for (const d of DEFAULT_PLANS) {
-    const plan = await TenantPlan.create({ ...d, tenantId: t._id, limits, features: PLAN_FEATURES.pro, active: true });
-    created += 1;
-    await syncPlanPrice(plan, t).catch((e) => console.error('[tenant] Plano padrão salvo sem o Stripe:', e?.message || e));
-  }
-  return created;
+export const DEFAULT_PLANS = [
+  { name: 'Essencial', priceCents: 9990, popular: false, description: 'Para tirar dúvidas do dia a dia com a assistente jurídica.', limits: ESSENCIAL },
+  { name: 'Avançado', priceCents: 19990, popular: true, description: 'Mais mensagens, documentos e cofre para acompanhar o seu caso.', limits: AVANCADO },
+  { name: 'Pro', priceCents: 39990, popular: false, description: 'Acesso completo à assistente jurídica, com os maiores limites.', limits: PRO },
+].map((p) => ({ ...p, interval: 'month' as const, features: featuresOf(p.limits), limits: limitsOf(p.limits) }));
+
+const createDefault = async (t: ITenant, d: (typeof DEFAULT_PLANS)[number]) => {
+  const plan = await TenantPlan.create({ ...d, tenantId: t._id, active: true });
+  await syncPlanPrice(plan, t).catch((e) => console.error('[tenant] Plano padrão salvo sem o Stripe:', e?.message || e));
+  return plan;
 };
 
-/** Na subida da API: dá os planos padrão aos escritórios já cadastrados que ainda não têm planos */
+/** Escritório ainda com os planos padrão antigos (Pro mensal R$ 399 e Pro anual R$ 3.999), sem nenhuma alteração */
+const hasUntouchedOldDefaults = (plans: any[]) => {
+  if (plans.length !== 2) return false;
+  const m = plans.find((p) => p.name === 'Pro mensal' && p.priceCents === 39900 && p.interval === 'month' && p.active);
+  const a = plans.find((p) => p.name === 'Pro anual' && p.priceCents === 399900 && p.interval === 'year' && p.active);
+  const proLimits = JSON.stringify(limitsOf(PRO));
+  const same = (p: any) => JSON.stringify(limitsOf(p.limits || {})) === proLimits;
+  return Boolean(m && a && same(m) && same(a));
+};
+
+export const ensureDefaultPlans = async (t: ITenant): Promise<number> => {
+  const plans = await TenantPlan.find({ tenantId: t._id });
+
+  // Sem nenhum plano: cria os três
+  if (plans.length === 0) {
+    for (const d of DEFAULT_PLANS) await createDefault(t, d);
+    return DEFAULT_PLANS.length;
+  }
+
+  // Ainda com os padrões antigos e sem alterações: troca pelos três novos.
+  // O "Pro mensal" vira o "Pro" (R$ 399,90; novo preço no Stripe) e o "Pro anual" sai de venda
+  // (quem já assinou continua no plano dele).
+  if (hasUntouchedOldDefaults(plans)) {
+    const mensal = plans.find((p) => p.name === 'Pro mensal')!;
+    const anual = plans.find((p) => p.name === 'Pro anual')!;
+    anual.active = false;
+    await anual.save();
+    await syncPlanPrice(anual, t).catch(() => undefined);
+    const pro = DEFAULT_PLANS.find((d) => d.name === 'Pro')!;
+    Object.assign(mensal, { name: pro.name, priceCents: pro.priceCents, description: pro.description, features: pro.features, limits: pro.limits, popular: false });
+    await mensal.save();
+    await syncPlanPrice(mensal, t).catch((e) => console.error('[tenant] Plano Pro salvo sem o Stripe:', e?.message || e));
+    for (const d of DEFAULT_PLANS.filter((x) => x.name !== 'Pro')) await createDefault(t, d);
+    return 2;
+  }
+
+  // O escritório já mexeu nos planos: nada muda
+  return 0;
+};
+
+/** Na subida da API: escritórios sem planos (ou com os padrões antigos intocados) recebem os três planos padrão */
 export const backfillDefaultPlans = async () => {
   const tenants = await Tenant.find({});
   let total = 0;
@@ -358,6 +404,7 @@ const planInput = (b: any) => {
     },
     features: (Array.isArray(b.features) ? b.features : String(b.features || '').split('\n')).map((f: any) => String(f).trim()).filter(Boolean).slice(0, 20),
     active: b.active === undefined ? true : Boolean(b.active),
+    popular: Boolean(b.popular),
   };
 };
 
