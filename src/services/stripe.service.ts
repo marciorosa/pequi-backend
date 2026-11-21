@@ -6,7 +6,6 @@ import User from '../models/user.model';
 import Subscription from '../models/subscription.model';
 import dotenv from 'dotenv';
 import { ExternalServiceError, ValidationError, NotFoundError, AppError } from '../utils/errors';
-import Tenant from '../models/tenant.model';
 
 dotenv.config();
 
@@ -266,20 +265,11 @@ export const stripeService = {
         throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
       }
 
-      // Eventos das contas conectadas (Connect) chegam por um endpoint com segredo próprio,
-      // que pode ser o mesmo endereço: tentamos os dois segredos
-      const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET].filter(Boolean) as string[];
-      let event: Stripe.Event | null = null;
-      let lastError: any = null;
-      for (const secret of secrets) {
-        try {
-          event = stripe.webhooks.constructEvent(req.body, sig, secret);
-          break;
-        } catch (err) {
-          lastError = err;
-        }
-      }
-      if (!event) throw lastError || new Error('Assinatura do webhook inválida');
+      const event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      );
 
 
       switch (event.type) {
@@ -287,21 +277,10 @@ export const stripeService = {
           const session = event.data.object as Stripe.Checkout.Session;
           if (session.metadata?.tenantPlanId) {
             // Assinatura de um cliente de escritório (white-label, com comissão via Connect)
-            const { recordClientCheckout } = await import('./connect.service');
+            const { recordClientCheckout } = await import('./tenantBilling.service');
             await recordClientCheckout(session).catch((e) => console.error('[stripe] Falha ao gravar assinatura do escritório:', e?.message || e));
           } else {
             await handleCheckoutSessionCompleted(session);
-          }
-          break;
-        }
-
-        case 'account.updated': {
-          // Situação da conta conectada do escritório (cadastro concluído, recebimentos liberados)
-          const account = event.data.object as Stripe.Account;
-          const tenant = await Tenant.findOne({ 'stripe.accountId': account.id });
-          if (tenant) {
-            const { applyAccountStatus } = await import('./connect.service');
-            await applyAccountStatus(tenant, account);
           }
           break;
         }
@@ -322,6 +301,9 @@ export const stripeService = {
         case 'invoice.paid': {
           const invoice = event.data.object as Stripe.Invoice;
           await handleInvoicePaid(invoice);
+          // Fatura de cliente de escritório: lança no extrato (bruto, comissão e líquido)
+          const { recordInvoiceEarning } = await import('./tenantBilling.service');
+          await recordInvoiceEarning(invoice).catch((e) => console.error('[stripe] Falha ao lançar fatura do escritório:', e?.message || e));
           break;
         }
 

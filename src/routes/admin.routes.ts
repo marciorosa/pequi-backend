@@ -4,7 +4,7 @@ import { requireAdmin } from '../middleware/admin.middleware';
 import { getOverview, listUsers, getUser, userAction, listSubscriptions, getBilling, listLogs } from '../controllers/admin.controller';
 import {
   listTenants, createTenant, loadTenantParam, getTenant, updateTenant, rotateWidgetKey, applyCommission,
-  listPlans, createPlan, updatePlan, listLeads, stripeOnboard, stripeRefresh, stripeDashboard,
+  listPlans, createPlan, updatePlan, listLeads, listClients, getFinance, createPayout,
 } from '../controllers/tenant.controller';
 
 // Área administrativa: toda rota exige login e permissão de administrador
@@ -31,8 +31,8 @@ router.get('/tenants/:id/plans', listPlans as any);
 router.post('/tenants/:id/plans', createPlan as any);
 router.put('/tenants/:id/plans/:planId', updatePlan as any);
 router.get('/tenants/:id/leads', listLeads as any);
-router.post('/tenants/:id/stripe/onboard', stripeOnboard as any);
-router.post('/tenants/:id/stripe/refresh', stripeRefresh as any);
-router.post('/tenants/:id/stripe/dashboard', stripeDashboard as any);
+router.get('/tenants/:id/clients', listClients as any);
+router.get('/tenants/:id/finance', getFinance as any);
+router.post('/tenants/:id/payouts', createPayout as any);
 
 export default router;

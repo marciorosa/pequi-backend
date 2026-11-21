@@ -23,14 +23,17 @@ import {
   panelUrl,
 } from '../services/tenant.service';
 import {
-  onboardingLink,
-  refreshAccountStatus,
-  dashboardLink,
   syncPlanPrice,
   createClientCheckout,
   confirmClientCheckout,
   applyCommissionToActive,
-} from '../services/connect.service';
+  tenantFinance,
+  tenantClients,
+} from '../services/tenantBilling.service';
+import { TenantPayout } from '../models/tenantLedger.model';
+import { sendWorkflowEmail } from '../services/email.service';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors';
 
 export interface TenantRequest extends AuthRequest {
@@ -52,12 +55,12 @@ const log = (req: AuthRequest, action: string, details?: string) =>
   AdminLog.create({ adminId: req.user!.id, adminEmail: req.user!.email || '', action, details }).catch(() => undefined);
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
-const MAX_LOGO_CHARS = 300_000; // logo enviado como data URL (cerca de 220 KB)
+const MAX_LOGO_CHARS = 700_000; // logo enviado como data URL (cerca de 500 KB)
 
 const cleanImage = (v: any): string | undefined => {
   const s = String(v ?? '').trim();
   if (!s) return '';
-  if (s.length > MAX_LOGO_CHARS) throw new AppError('A imagem é grande demais (máximo de 200 KB)', 400);
+  if (s.length > MAX_LOGO_CHARS) throw new AppError('A imagem é grande demais (máximo de 500 KB)', 400);
   if (/^https:\/\//i.test(s) || /^data:image\/(png|jpeg|webp|svg\+xml|x-icon|vnd\.microsoft\.icon);base64,/i.test(s)) return s;
   throw new AppError('Use um endereço https:// ou envie uma imagem PNG, JPG, WEBP ou SVG', 400);
 };
@@ -107,19 +110,45 @@ const applyTenantFields = (t: ITenant, b: any) => {
   }
 };
 
-/** Liga o dono (pelo e-mail) ao escritório */
-const linkOwner = async (t: ITenant, ownerEmail?: string) => {
+/**
+ * Liga o responsável (pelo e-mail) ao escritório.
+ * Se ainda não houver conta com esse e-mail, cria a conta e devolve um link para
+ * a pessoa definir a senha (também enviado por e-mail, quando o envio estiver configurado).
+ */
+const linkOwner = async (t: ITenant, ownerEmail?: string): Promise<string | null> => {
   const email = String(ownerEmail || '').trim().toLowerCase();
-  if (!email) return;
-  const owner = await User.findOne({ email });
-  if (!owner) throw new AppError(`Não há conta com o e-mail ${email}. Peça ao escritório para criar a conta no Pequi primeiro.`, 400);
-  if (owner.tenantId && String(owner.tenantId) !== String(t._id)) {
+  if (!email) return null;
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new AppError('E-mail do responsável inválido', 400);
+  let owner = await User.findOne({ email });
+  let inviteLink: string | null = null;
+  if (owner && owner.tenantId && String(owner.tenantId) !== String(t._id)) {
     throw new AppError('Esta conta já pertence a outro escritório', 400);
+  }
+  if (!owner) {
+    const token = crypto.randomBytes(32).toString('hex');
+    owner = new User({
+      name: t.branding?.displayName || t.name,
+      email,
+      password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+      resetPasswordToken: await bcrypt.hash(token, 10),
+      resetPasswordExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    const front = (process.env.FRONTEND_URL || 'https://pequi.me').split(',')[0].trim().replace(/\/$/, '');
+    inviteLink = `${front}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
   }
   owner.tenantId = t._id as any;
   owner.tenantRole = 'owner';
   await owner.save();
   t.ownerUserId = owner._id as any;
+  if (inviteLink) {
+    const name = t.branding?.displayName || t.name;
+    sendWorkflowEmail(
+      email,
+      `Acesso à administração de ${name}`,
+      `<div style="font-family:sans-serif;color:#333"><p>Olá!</p><p>A área de administração de <strong>${name}</strong> foi criada.</p><p>Defina sua senha neste link (vale por 7 dias):</p><p><a href="${inviteLink}">${inviteLink}</a></p><p>Depois, entre com este e-mail e abra o menu <strong>Administração</strong>.</p></div>`
+    ).catch((e) => console.error('[tenant] Falha ao enviar o convite:', e?.message || e));
+  }
+  return inviteLink;
 };
 
 const adminView = async (t: ITenant) => {
@@ -176,11 +205,11 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     applyTenantFields(t, { ...b, slug: b.slug || b.name });
     if (!t.branding.displayName) t.branding.displayName = t.name;
     await t.validate();
-    await linkOwner(t, b.ownerEmail);
+    const inviteLink = await linkOwner(t, b.ownerEmail);
     await t.save();
     clearTenantCache();
     log(req, 'tenantCreate', `${t.name} (${t.slug})`);
-    res.status(201).json({ tenant: await adminView(t) });
+    res.status(201).json({ tenant: await adminView(t), inviteLink });
   } catch (error) {
     fail(res, error, 'Não foi possível cadastrar o escritório');
   }
@@ -210,11 +239,11 @@ export const updateTenant = async (req: TenantRequest, res: Response) => {
     const t = req.tenant!;
     const before = t.commissionPercent;
     applyTenantFields(t, req.body || {});
-    if (req.body?.ownerEmail !== undefined) await linkOwner(t, req.body.ownerEmail);
+    const inviteLink = req.body?.ownerEmail !== undefined ? await linkOwner(t, req.body.ownerEmail) : null;
     await t.save();
     clearTenantCache();
     log(req, 'tenantUpdate', `${t.name}${before !== t.commissionPercent ? ` · comissão ${before}% → ${t.commissionPercent}%` : ''}`);
-    res.json({ tenant: await adminView(t) });
+    res.json({ tenant: await adminView(t), inviteLink });
   } catch (error) {
     fail(res, error, 'Não foi possível salvar o escritório');
   }
@@ -267,7 +296,7 @@ export const requireOwner = (req: TenantRequest, res: Response, next: NextFuncti
 export const officeSummary = async (req: TenantRequest, res: Response) => {
   const t = req.tenant!;
   res.json({
-    tenant: { ...publicTenant(t), commissionPercent: t.commissionPercent, pequiPlan: t.pequiPlan, stripe: t.stripe, widgetKey: t.widget.publicKey },
+    tenant: { ...publicTenant(t), commissionPercent: t.commissionPercent, pequiPlan: t.pequiPlan, widgetKey: t.widget.publicKey },
   });
 };
 
@@ -346,38 +375,43 @@ export const listLeads = async (req: TenantRequest, res: Response) => {
   });
 };
 
-/** POST .../stripe/onboard: link de cadastro do escritório no Stripe Connect */
-export const stripeOnboard = async (req: TenantRequest, res: Response) => {
+/** GET .../clients: clientes do escritório e o plano contratado */
+export const listClients = async (req: TenantRequest, res: Response) => {
   try {
-    const t = req.tenant!;
-    const owner = t.ownerUserId ? await User.findById(t.ownerUserId).select('email').lean() : null;
-    const front = (process.env.FRONTEND_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
-    // Volta só para o próprio Pequi ou para o painel do escritório (nunca para um endereço qualquer)
-    const asked = String(req.body?.returnUrl || '');
-    const safe = [front, panelUrl(t)].some((base) => asked === base || asked.startsWith(`${base}/`));
-    const returnUrl = safe ? asked : `${front}/dashboard/admin?tab=tenants&tenant=${t._id}`;
-    const url = await onboardingLink(t, returnUrl, (owner as any)?.email);
-    res.json({ url, accountId: t.stripe.accountId });
+    res.json({ clients: await tenantClients(req.tenant!._id) });
   } catch (error) {
-    fail(res, error, 'Não foi possível iniciar o cadastro no Stripe');
+    fail(res, error, 'Não foi possível carregar os clientes');
   }
 };
 
-/** POST .../stripe/refresh */
-export const stripeRefresh = async (req: TenantRequest, res: Response) => {
+/** GET .../finance: bruto, comissão do Pequi, líquido, repassado e saldo a receber */
+export const getFinance = async (req: TenantRequest, res: Response) => {
   try {
-    res.json({ stripe: await refreshAccountStatus(req.tenant!) });
+    res.json({ commissionPercent: req.tenant!.commissionPercent, ...(await tenantFinance(req.tenant!._id)) });
   } catch (error) {
-    fail(res, error, 'Não foi possível consultar o Stripe');
+    fail(res, error, 'Não foi possível carregar o extrato');
   }
 };
 
-/** POST .../stripe/dashboard */
-export const stripeDashboard = async (req: TenantRequest, res: Response) => {
+/** POST /admin/tenants/:id/payouts { amount, paidAt?, note? }: registra um repasse feito ao escritório */
+export const createPayout = async (req: TenantRequest, res: Response) => {
   try {
-    res.json({ url: await dashboardLink(req.tenant!) });
+    const amount = Number(String(req.body?.amount ?? '').replace(/\./g, '').replace(',', '.'));
+    const amountCents = Math.round(amount * 100);
+    if (!Number.isFinite(amountCents) || amountCents < 1) throw new AppError('Informe o valor do repasse', 400);
+    const paidAt = req.body?.paidAt ? new Date(req.body.paidAt) : new Date();
+    if (Number.isNaN(paidAt.getTime())) throw new AppError('Data inválida', 400);
+    const payout = await TenantPayout.create({
+      tenantId: req.tenant!._id,
+      amountCents,
+      paidAt,
+      note: String(req.body?.note || '').slice(0, 200),
+      adminEmail: req.user?.email,
+    });
+    log(req, 'tenantPayout', `${req.tenant!.name}: R$ ${(amountCents / 100).toFixed(2)}`);
+    res.status(201).json({ payout });
   } catch (error) {
-    fail(res, error, 'Não foi possível abrir o painel do Stripe');
+    fail(res, error, 'Não foi possível registrar o repasse');
   }
 };
 

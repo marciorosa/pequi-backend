@@ -16,9 +16,8 @@ import {
   createPlan,
   updatePlan,
   listLeads,
-  stripeOnboard,
-  stripeRefresh,
-  stripeDashboard,
+  listClients,
+  getFinance,
   clientCheckout,
   clientConfirm,
 } from '../controllers/tenant.controller';
@@ -34,9 +33,8 @@ officeRouter.get('/plans', listPlans as any);
 officeRouter.post('/plans', requireOwner as any, createPlan as any);
 officeRouter.put('/plans/:planId', requireOwner as any, updatePlan as any);
 officeRouter.get('/leads', listLeads as any);
-officeRouter.post('/stripe/onboard', requireOwner as any, stripeOnboard as any);
-officeRouter.post('/stripe/refresh', requireOwner as any, stripeRefresh as any);
-officeRouter.post('/stripe/dashboard', requireOwner as any, stripeDashboard as any);
+officeRouter.get('/clients', listClients as any);
+officeRouter.get('/finance', requireOwner as any, getFinance as any);
 
 export const tenantBillingRouter = express.Router();
 tenantBillingRouter.use(authMiddleware as any);
