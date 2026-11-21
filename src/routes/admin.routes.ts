@@ -2,10 +2,7 @@ import express from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { requireAdmin } from '../middleware/admin.middleware';
 import { getOverview, listUsers, getUser, userAction, listSubscriptions, getBilling, listLogs } from '../controllers/admin.controller';
-import {
-  listTenants, createTenant, loadTenantParam, getTenant, updateTenant, rotateWidgetKey, applyCommission,
-  listPlans, createPlan, updatePlan, listLeads, listClients, getFinance, createPayout,
-} from '../controllers/tenant.controller';
+import { listTenants, createTenant, loadTenantParam, getTenant, updateTenant, rotateWidgetKey, listLeads, listClients } from '../controllers/tenant.controller';
 
 // Área administrativa: toda rota exige login e permissão de administrador
 const router = express.Router();
@@ -26,13 +23,7 @@ router.use('/tenants/:id', loadTenantParam as any);
 router.get('/tenants/:id', getTenant as any);
 router.put('/tenants/:id', updateTenant as any);
 router.post('/tenants/:id/rotate-key', rotateWidgetKey as any);
-router.post('/tenants/:id/apply-commission', applyCommission as any);
-router.get('/tenants/:id/plans', listPlans as any);
-router.post('/tenants/:id/plans', createPlan as any);
-router.put('/tenants/:id/plans/:planId', updatePlan as any);
 router.get('/tenants/:id/leads', listLeads as any);
 router.get('/tenants/:id/clients', listClients as any);
-router.get('/tenants/:id/finance', getFinance as any);
-router.post('/tenants/:id/payouts', createPayout as any);
 
 export default router;

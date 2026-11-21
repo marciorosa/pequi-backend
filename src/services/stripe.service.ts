@@ -275,13 +275,7 @@ export const stripeService = {
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as Stripe.Checkout.Session;
-          if (session.metadata?.tenantPlanId) {
-            // Assinatura de um cliente de escritório (white-label, com comissão via Connect)
-            const { recordClientCheckout } = await import('./tenantBilling.service');
-            await recordClientCheckout(session).catch((e) => console.error('[stripe] Falha ao gravar assinatura do escritório:', e?.message || e));
-          } else {
-            await handleCheckoutSessionCompleted(session);
-          }
+          await handleCheckoutSessionCompleted(session);
           break;
         }
 
@@ -301,9 +295,6 @@ export const stripeService = {
         case 'invoice.paid': {
           const invoice = event.data.object as Stripe.Invoice;
           await handleInvoicePaid(invoice);
-          // Fatura de cliente de escritório: lança no extrato (bruto, comissão e líquido)
-          const { recordInvoiceEarning } = await import('./tenantBilling.service');
-          await recordInvoiceEarning(invoice).catch((e) => console.error('[stripe] Falha ao lançar fatura do escritório:', e?.message || e));
           break;
         }
 
@@ -412,9 +403,6 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     existingSubscription.currentPeriodStart = new Date(subscription.current_period_start * 1000);
     existingSubscription.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
     existingSubscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
-    if (subscription.application_fee_percent !== null && subscription.application_fee_percent !== undefined) {
-      existingSubscription.applicationFeePercent = subscription.application_fee_percent;
-    }
 
     if (subscription.items.data.length > 0) {
       existingSubscription.stripePriceId = subscription.items.data[0].price.id;

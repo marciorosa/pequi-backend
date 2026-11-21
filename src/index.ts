@@ -147,10 +147,6 @@ const connectToMongo = (): void => {
   }).then(() => {
     lastDbError = null;
     console.log('[startup] MongoDB conectado');
-    // White-label: escritórios sem planos recebem os planos padrão (iguais ao Pro do Pequi)
-    import('./controllers/tenant.controller')
-      .then((m) => m.backfillDefaultPlans())
-      .catch((e) => console.error('[startup] Falha nos planos padrão:', e?.message || e));
   }).catch((err) => {
     // Never expose credentials that could appear inside a connection string
     lastDbError = String(err?.message || err).replace(/mongodb(\+srv)?:\/\/[^@\s]*@/g, 'mongodb://***@');
@@ -173,7 +169,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-21-white-label-7',
+    version: '2026-11-21-white-label-8',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
@@ -223,7 +219,7 @@ import vaultRoutes from './routes/vault.routes';
 import workflowRoutes from './routes/workflow.routes';
 import webhookRoutes from './routes/webhook.routes';
 import adminRoutes from './routes/admin.routes';
-import { tenantPublicRouter, officeRouter, tenantBillingRouter } from './routes/tenant.routes';
+import { tenantPublicRouter, officeRouter } from './routes/tenant.routes';
 
 // Register routes (served under /api and also without the prefix, so the
 // frontend works whether NEXT_PUBLIC_API_URL ends in /api or not)
@@ -241,7 +237,6 @@ const routes: Array<[string, express.Router]> = [
   ['/admin', adminRoutes],
   ['/tenants', tenantPublicRouter],
   ['/office', officeRouter],
-  ['/tenant-billing', tenantBillingRouter],
 ];
 for (const [path, router] of routes) {
   app.use([`/api${path}`, path], router);

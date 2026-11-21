@@ -137,8 +137,6 @@ export const publicTenant = (t: ITenant) => ({
   welcomeMessage: t.branding?.welcomeMessage || '',
   widgetPosition: t.branding?.widgetPosition || 'right',
   panelUrl: panelUrl(t),
-  // Os pagamentos entram na conta Stripe do Pequi: basta o escritório estar ativo e o Stripe configurado
-  billingReady: t.status === 'active' && Boolean(process.env.STRIPE_SECRET_KEY),
 });
 
 /** Endereço do painel com a marca do escritório (domínio próprio ou subdomínio) */

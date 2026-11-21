@@ -9,7 +9,7 @@
  * 3. O iframe pede POST /widget/session e recebe um token curto (2 h) preso ao escritório,
  *    ao visitante e à origem. Cada mensagem exige esse token e passa por limites de uso.
  * 4. Depois de algumas mensagens grátis, o widget pede o contato (nome, e-mail, telefone);
- *    esgotadas as mensagens após o contato, sugere os planos do escritório.
+ *    esgotadas as mensagens após o contato, encerra e avisa que a equipe do escritório vai falar com a pessoa.
  */
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Tenant from '../models/tenant.model';
 import WidgetConversation from '../models/widgetConversation.model';
-import { findTenantByWidgetKey, isWidgetOriginAllowed, normalizeOrigin, publicTenant, tenantPageUrl } from '../services/tenant.service';
+import { findTenantByWidgetKey, isWidgetOriginAllowed, normalizeOrigin, publicTenant } from '../services/tenant.service';
 import { hit, clientIp } from '../middleware/rateLimit.middleware';
 import { maritacaChat, isMaritacaConfigured } from '../services/maritaca.service';
 import geminiService, { formatResponseToHTML } from '../services/gemini.service';
@@ -112,9 +112,9 @@ const conversationState = (conv: any, tenant: any) => {
   const afterLead = tenant.widget?.leadMessages ?? 10;
   const count = conv?.userMessageCount || 0;
   const hasLead = Boolean(conv?.lead?.email || conv?.lead?.phone);
-  let gate: 'none' | 'lead' | 'plan' = 'none';
+  let gate: 'none' | 'lead' | 'contact' = 'none';
   if (!hasLead && count >= free) gate = 'lead';
-  else if (hasLead && count >= free + afterLead) gate = 'plan';
+  else if (hasLead && count >= free + afterLead) gate = 'contact';
   return {
     gate,
     hasLead,
@@ -147,7 +147,7 @@ router.post('/session', pequiCors, async (req: Request, res: Response) => {
     expiresIn: TOKEN_TTL,
   });
 
-  res.json({ token, visitorId, tenant: publicTenant(tenant), state: conversationState(conv, tenant), plansUrl: tenantPageUrl(tenant, '/pricing') });
+  res.json({ token, visitorId, tenant: publicTenant(tenant), state: conversationState(conv, tenant) });
 });
 
 /* --------------------------------- mensagens --------------------------------- */
@@ -189,7 +189,7 @@ router.post('/message', pequiCors, async (req: Request, res: Response) => {
   let conv = await WidgetConversation.findOne({ tenantId: tenant._id, visitorId: claims.v });
   const state = conversationState(conv, tenant);
   if (state.gate !== 'none') {
-    return res.json({ gate: state.gate, state, plansUrl: tenantPageUrl(tenant, '/pricing') });
+    return res.json({ gate: state.gate, state });
   }
   if (!conv) conv = new WidgetConversation({ tenantId: tenant._id, visitorId: claims.v, origin: claims.o, messages: [] });
 

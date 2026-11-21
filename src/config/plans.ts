@@ -2,7 +2,7 @@ import Subscription from '../models/subscription.model';
 import User from '../models/user.model';
 import VaultFolder from '../models/vault.model';
 import Workflow from '../models/workflow.model';
-import TenantPlan from '../models/tenantPlan.model';
+import Tenant from '../models/tenant.model';
 
 export type FeatureType = 'searchCount' | 'chatCount' | 'docsCount' | 'vaultFolderCount' | 'workflowCount';
 export type PlanTier = 'free' | 'pro' | 'enterprise';
@@ -68,20 +68,13 @@ export interface ResolvedPlan {
   subscription: any | null;
   /** Limites de um plano criado pelo escritório (white-label); substituem os de PLAN_LIMITS */
   customLimits?: Record<FeatureType, number>;
+  /** Início do ciclo de uso quando o plano vem do escritório (white-label) */
+  cycleStart?: Date;
   /** Nome do plano do escritório, quando houver */
   customPlanName?: string;
   customFeatures?: string[];
 }
 
-/** Converte os limites gravados no TenantPlan (null = sem limite) para números */
-const tenantPlanLimits = (limits: any): Record<FeatureType, number> => {
-  const out = {} as Record<FeatureType, number>;
-  (Object.keys(PLAN_LIMITS.free) as FeatureType[]).forEach((f) => {
-    const v = limits?.[f];
-    out[f] = v === null || v === undefined ? Infinity : Number(v);
-  });
-  return out;
-};
 
 /** Descobre o plano real do usuário a partir da assinatura gravada no banco */
 export const resolvePlan = async (user: { email?: string; subscriptionId?: any; role?: string; complimentaryProUntil?: Date | null }): Promise<ResolvedPlan> => {
@@ -99,25 +92,45 @@ export const resolvePlan = async (user: { email?: string; subscriptionId?: any; 
       tier = 'pro';
       subscription = sub;
       // Se o Enterprise for criado no Stripe, defina tier = 'enterprise' conforme o priceId.
-
-      // Assinatura de um plano do escritório: valem os limites que o escritório cadastrou
-      if ((sub as any).tenantPlanId) {
-        const tp = await TenantPlan.findById((sub as any).tenantPlanId).lean();
-        if (tp) {
-          return {
-            tier,
-            isAdmin: isAdminEmail(user.email) || user.role === 'admin',
-            subscription,
-            customLimits: tenantPlanLimits((tp as any).limits),
-            customPlanName: (tp as any).name,
-            customFeatures: (tp as any).features || [],
-          };
-        }
-      }
     }
   }
 
-  return { tier, isAdmin: isAdminEmail(user.email) || user.role === 'admin', subscription };
+  // White-label: quem pertence a um escritório (clientes e equipe) usa com o plano do escritório
+  // (Pro ou Enterprise) enquanto a assinatura do escritório no Pequi estiver ativa
+  let cycleStart: Date | undefined;
+  if ((user as any).tenantId) {
+    const tenant = await Tenant.findById((user as any).tenantId);
+    const cover = tenant ? await officeCoverage(tenant) : null;
+    if (cover?.active) {
+      if (cover.tier === 'enterprise' || tier === 'free') tier = cover.tier;
+      if (!subscription) cycleStart = cover.cycleStart;
+    }
+  }
+
+  return { tier, isAdmin: isAdminEmail(user.email) || user.role === 'admin', subscription, cycleStart };
+};
+
+/**
+ * Cobertura do escritório (white-label): o escritório assina o Pequi (Pro R$ 399/mês ou R$ 3.999/ano,
+ * ou Enterprise combinado com o Pequi) e os clientes dele usam a assistente dentro desse plano.
+ * Ativa quando: escritório ativo e (Enterprise marcado no admin, ou assinatura Pro ativa do responsável,
+ * ou Pro de cortesia do responsável).
+ */
+export const officeCoverage = async (
+  t: any
+): Promise<{ active: boolean; tier: PlanTier; reason: string; cycleStart?: Date }> => {
+  const tier: PlanTier = t.pequiPlan === 'enterprise' ? 'enterprise' : 'pro';
+  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  if (!t || t.status !== 'active') return { active: false, tier, reason: 'Escritório suspenso' };
+  if (tier === 'enterprise') return { active: true, tier, reason: 'Enterprise', cycleStart: startOfMonth };
+  if (!t.ownerUserId) return { active: false, tier, reason: 'Sem responsável cadastrado' };
+  const owner: any = await User.findById(t.ownerUserId).select('subscriptionId complimentaryProUntil').lean();
+  const sub: any = owner?.subscriptionId ? await Subscription.findById(owner.subscriptionId).lean() : null;
+  if (sub && sub.status === 'active') return { active: true, tier, reason: 'Assinatura Pro ativa', cycleStart: sub.currentPeriodStart };
+  if (owner?.complimentaryProUntil && new Date(owner.complimentaryProUntil).getTime() > Date.now()) {
+    return { active: true, tier, reason: 'Pro de cortesia', cycleStart: startOfMonth };
+  }
+  return { active: false, tier, reason: 'Escritório sem assinatura ativa do Pequi' };
 };
 
 export const getLimit = (plan: ResolvedPlan, feature: FeatureType): number =>
@@ -156,7 +169,7 @@ export const getUsage = async (user: { _id: any; apiUsage?: any }): Promise<Reco
  * Altera o objeto user em memória para que a checagem seguinte já use os valores zerados.
  */
 export const ensureUsageCycle = async (user: any, plan: ResolvedPlan): Promise<void> => {
-  const periodStart: Date | undefined = plan.subscription?.currentPeriodStart;
+  const periodStart: Date | undefined = plan.subscription?.currentPeriodStart || plan.cycleStart;
   if (!periodStart) return;
 
   const last: Date | undefined = user.usageCycleStart;
