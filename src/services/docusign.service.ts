@@ -2,7 +2,39 @@
 
 import * as docusign from 'docusign-esign';
 import path from 'path';
+import crypto from 'crypto';
 import { ExternalServiceError, ValidationError } from '../utils/errors';
+
+/**
+ * Aceita a chave RSA do DocuSign como foi colada no painel da hospedagem:
+ * com \\n literais, com quebras reais, numa linha só com espaços, entre aspas ou em base64.
+ * Devolve o PEM com cabeçalho, corpo em linhas de 64 caracteres e rodapé.
+ */
+export const normalizePrivateKey = (raw?: string): string | undefined => {
+    if (!raw) return undefined;
+    let v = raw.trim().replace(/^['"]|['"]$/g, '').replace(/\\+r/g, '').replace(/\\+n/g, '\n').replace(/\r/g, '').trim();
+    if (!v.includes('-----BEGIN')) {
+        try {
+            const decoded = Buffer.from(v, 'base64').toString('utf8');
+            if (decoded.includes('-----BEGIN')) v = decoded.trim();
+        } catch { /* não era base64 */ }
+    }
+    const m = v.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+    if (!m) {
+        // Só o corpo da chave, sem cabeçalho: descobre se é PKCS#1 (RSA PRIVATE KEY) ou PKCS#8 (PRIVATE KEY)
+        const body = v.replace(/\s+/g, '');
+        if (!/^[A-Za-z0-9+/=]{100,}$/.test(body)) return v;
+        const lines = (body.match(/.{1,64}/g) || []).join('\n');
+        for (const label of ['RSA PRIVATE KEY', 'PRIVATE KEY']) {
+            const pem = `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----\n`;
+            try { crypto.createPrivateKey(pem); return pem; } catch { /* tenta o próximo */ }
+        }
+        return v;
+    }
+    const body = m[2].replace(/\s+/g, '');
+    const lines = body.match(/.{1,64}/g) || [];
+    return `-----BEGIN ${m[1]}-----\n${lines.join('\n')}\n-----END ${m[1]}-----\n`;
+};
 
 export class DocuSignService {
     private static apiClient = new docusign.ApiClient();
@@ -12,13 +44,21 @@ export class DocuSignService {
      */
     private static async authenticate() {
         try {
-            const privateKey = process.env.DOCUSIGN_RSA_PRIVATE_KEY?.replace(/\\n/g, '\n');
+            const privateKey = normalizePrivateKey(process.env.DOCUSIGN_RSA_PRIVATE_KEY);
             const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY;
             const userId = process.env.DOCUSIGN_USER_ID;
             const basePath = process.env.DOCUSIGN_BASE_PATH;
 
             if (!privateKey || !integrationKey || !userId) {
                 throw new ValidationError('Configuração do DocuSign ausente: chave privada RSA, Integration Key ou User ID');
+            }
+            try {
+                crypto.createPrivateKey(privateKey);
+            } catch {
+                throw new ValidationError(
+                    `A chave RSA do DocuSign (DOCUSIGN_RSA_PRIVATE_KEY) não é uma chave privada válida: confira se foi colada inteira, ` +
+                    `do -----BEGIN ao -----END, e se não é a chave pública (${privateKey.length} caracteres recebidos)`
+                );
             }
 
             if (basePath) {
