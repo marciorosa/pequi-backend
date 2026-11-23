@@ -86,19 +86,42 @@ export const runWorkflow = async (req: AuthRequest, res: Response) => {
         await workflow.save();
 
 
-        // Execute in background
-        WorkflowExecutionService.execute(id, {
+        // Executa e espera o resultado por até 45 s, para a tela mostrar o que cada etapa fez.
+        // Fluxos mais longos continuam rodando no servidor depois da resposta.
+        const run = WorkflowExecutionService.execute(id, {
             testFile: isSimulation ? {
-                name: fileName || (req.file as any)?.originalname || 'simulation_doc.pdf',
+                name: fileName || (req.file as any)?.originalname || 'documento.pdf',
                 buffer: (req.file as any)?.buffer
             } : undefined
-        }).catch(err => {
         });
+        run.catch((err) => console.error('[workflow] execução falhou:', err?.message || err));
+
+        const finished = await Promise.race([
+            run.then((entries) => entries || []).catch(() => null),
+            new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 45000)),
+        ]);
+
+        const labelOf = (nodeId: string) => {
+            const node: any = workflow.nodes.find((n: any) => n.id === nodeId);
+            return node?.data?.label || node?.data?.subtype || 'Etapa';
+        };
+        const steps = Array.isArray(finished)
+            ? finished.map(([nodeId, out]: [string, any]) => ({
+                label: labelOf(nodeId),
+                status: out?.error ? 'error' : (out?.status || 'ok'),
+                error: out?.error,
+                recipient: out?.recipient,
+            }))
+            : null;
+        const skipped = steps ? Math.max(0, workflow.nodes.length - steps.length) : 0;
 
         res.json({
-            message: isSimulation ? 'Simulação iniciada' : 'Execução do fluxo de trabalho iniciada',
-            executionId: Date.now().toString(),
-            steps: workflow.nodes.length
+            message: finished === undefined
+                ? 'O fluxo continua em execução no servidor'
+                : finished === null ? 'Falha ao executar o fluxo de trabalho' : 'Fluxo executado',
+            finished: Array.isArray(finished),
+            steps,
+            skipped,
         });
     } catch (err) {
         res.status(500).json({ message: 'Falha ao executar o fluxo de trabalho' });

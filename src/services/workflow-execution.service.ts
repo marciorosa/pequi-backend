@@ -10,6 +10,16 @@ interface ExecutionResult {
     output: any;
 }
 
+/** Motivo legível de uma falha (inclui o código devolvido pelo DocuSign, como consent_required) */
+const describeError = (err: any): string => {
+    let orig = err;
+    while (orig?.originalError) orig = orig.originalError;
+    const body = orig?.response?.body ?? orig?.response?.data;
+    const code = body?.error || body?.errorCode;
+    const msg = body?.error_description || body?.message || orig?.message || err?.message;
+    return [code, msg].filter(Boolean).join(' - ') || 'erro desconhecido';
+};
+
 export class WorkflowExecutionService {
     /**
      * Execute a workflow
@@ -155,7 +165,9 @@ export class WorkflowExecutionService {
                             const subject = config.subject || 'Pequi';
 
                             // Check if digital signature is requested
-                            if (config.useDocuSign && finalOutput?.fileBuffer) {
+                            if (config.useDocuSign && !finalOutput?.fileBuffer) {
+                                results.set(id, { error: 'Assinatura digital pedida, mas nenhum arquivo chegou a esta etapa. Escolha um PDF no gatilho.' });
+                            } else if (config.useDocuSign && finalOutput?.fileBuffer) {
                                 try {
                                     await DocuSignService.sendEnvelope({
                                         fileBuffer: finalOutput.fileBuffer,
@@ -167,7 +179,9 @@ export class WorkflowExecutionService {
                                     });
                                     results.set(id, { status: 'docusign_sent', recipient });
                                 } catch (dsErr) {
-                                    results.set(id, { error: 'Falha na solicitação ao DocuSign' });
+                                    const detail = describeError(dsErr);
+                                    console.error('[workflow] DocuSign falhou:', detail);
+                                    results.set(id, { error: `Falha no DocuSign: ${detail}` });
                                 }
                             } else {
                                 // Default simple email
@@ -179,6 +193,8 @@ export class WorkflowExecutionService {
                                 await sendWorkflowEmail(recipient, subject, emailContent);
                                 results.set(id, { status: 'sent', recipient });
                             }
+                        } else {
+                            results.set(id, { error: 'Destinatário do e-mail não informado' });
                         }
                         break;
 
@@ -186,7 +202,8 @@ export class WorkflowExecutionService {
                         results.set(id, { status: 'skipped' });
                 }
             } catch (err) {
-                results.set(id, { error: 'Falha na execução', details: (err as Error).message });
+                console.error(`[workflow] etapa ${subtype} falhou:`, describeError(err));
+                results.set(id, { error: `Falha na execução: ${describeError(err)}` });
             }
 
             // Find next node
