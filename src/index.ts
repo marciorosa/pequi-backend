@@ -169,7 +169,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-21-white-label-8',
+    version: '2026-11-23-fluxos-9',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
