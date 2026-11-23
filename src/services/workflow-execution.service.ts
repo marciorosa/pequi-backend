@@ -38,12 +38,18 @@ export class WorkflowExecutionService {
             return;
         }
 
-        let currentNode = triggerNode;
+        // Percorre o fluxo em largura: um bloco pode ter várias saídas
+        // (ex.: o mesmo PDF vai para "Enviar por e-mail" e para "Salvar no cofre")
+        const queue: any[] = [triggerNode];
+        const visited = new Set<string>();
         let iterations = 0;
         const maxIterations = nodes.length + 5;
 
-        while (currentNode && iterations < maxIterations) {
+        while (queue.length && iterations < maxIterations) {
             iterations++;
+            const currentNode = queue.shift();
+            if (!currentNode || visited.has(currentNode.id)) continue;
+            visited.add(currentNode.id);
             const { id, data } = currentNode;
             const subtype = data.subtype;
             const config = data.config || {};
@@ -112,7 +118,9 @@ export class WorkflowExecutionService {
 
                     case 'save_vault':
                         const contentToSave = this.getPreviousOutput(id, edges, results);
-                        if (contentToSave?.content) {
+                        if (!contentToSave?.content && !contentToSave?.fileBuffer) {
+                            results.set(id, { error: 'Nada chegou a esta etapa para salvar. Escolha um arquivo no gatilho.' });
+                        } else {
                             const userId = (workflow as any).userId;
 
                             try {
@@ -128,13 +136,22 @@ export class WorkflowExecutionService {
                                     });
                                 }
 
-                                const fileName = `Analise_${workflow.name}_${Date.now()}.html`;
-                                const buffer = Buffer.from(contentToSave.content);
+                                // Etapa de IA antes (resumo, riscos, resposta): salva o texto gerado em HTML.
+                                // Direto do gatilho: salva o próprio arquivo enviado (ex.: o PDF).
+                                const prevNode: any = nodes.find(n => n.id === edges.find(e => e.target === id)?.source);
+                                const fromTrigger = (prevNode?.data as any)?.nodeType === 'trigger';
+                                const saveOriginal = fromTrigger && contentToSave.fileBuffer;
+                                const originalName = String(contentToSave.fileName || 'documento.pdf');
+                                const fileName = saveOriginal ? originalName : `Analise_${workflow.name}_${Date.now()}.html`;
+                                const buffer: Buffer = saveOriginal ? contentToSave.fileBuffer : Buffer.from(contentToSave.content);
+                                const mimeType = saveOriginal
+                                    ? (/\.pdf$/i.test(originalName) ? 'application/pdf' : 'application/octet-stream')
+                                    : 'text/html';
 
                                 const { s3Key, s3Url } = await s3Service.uploadFile(
                                     buffer,
                                     fileName,
-                                    'text/html',
+                                    mimeType,
                                     userId.toString(),
                                     folder._id.toString()
                                 );
@@ -143,7 +160,7 @@ export class WorkflowExecutionService {
                                     name: fileName,
                                     originalName: fileName,
                                     size: buffer.length,
-                                    mimeType: 'text/html',
+                                    mimeType,
                                     s3Key,
                                     s3Url,
                                     uploadedAt: new Date(),
@@ -153,7 +170,8 @@ export class WorkflowExecutionService {
                                 await folder.save();
                                 results.set(id, { status: 'saved', folder: folder.name, fileName });
                             } catch (vaultErr) {
-                                results.set(id, { error: 'Falha ao salvar no Cofre' });
+                                console.error('[workflow] Cofre falhou:', describeError(vaultErr));
+                                results.set(id, { error: `Falha ao salvar no Cofre: ${describeError(vaultErr)}` });
                             }
                         }
                         break;
@@ -206,12 +224,10 @@ export class WorkflowExecutionService {
                 results.set(id, { error: `Falha na execução: ${describeError(err)}` });
             }
 
-            // Find next node
-            const outgoingEdge = edges.find(e => e.source === id);
-            if (outgoingEdge) {
-                currentNode = nodes.find(n => n.id === outgoingEdge.target) as any;
-            } else {
-                currentNode = null as any;
+            // Próximos blocos: todos os ligados à saída deste
+            for (const e of edges.filter(e => e.source === id)) {
+                const next = nodes.find(n => n.id === e.target);
+                if (next && !visited.has(next.id)) queue.push(next);
             }
         }
 

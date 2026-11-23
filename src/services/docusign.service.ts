@@ -40,6 +40,47 @@ export class DocuSignService {
     private static apiClient = new docusign.ApiClient();
 
     /**
+     * Diagnóstico para /health/docusign: diz o que está configurado (sem expor a chave),
+     * tenta o login e devolve o link de autorização montado com a Integration Key do próprio servidor.
+     */
+    static async check() {
+        const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY || '';
+        const userId = process.env.DOCUSIGN_USER_ID || '';
+        const accountId = process.env.DOCUSIGN_ACCOUNT_ID || '';
+        const basePath = process.env.DOCUSIGN_BASE_PATH || '';
+        const isDemo = !basePath || basePath.includes('demo');
+        const oauthHost = isDemo ? 'account-d.docusign.com' : 'account.docusign.com';
+        const redirect = (process.env.FRONTEND_URL || 'https://pequi.me').replace(/\/?$/, '/');
+        const consentUrl = integrationKey
+            ? `https://${oauthHost}/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=${integrationKey}&redirect_uri=${encodeURIComponent(redirect)}`
+            : null;
+        const key = normalizePrivateKey(process.env.DOCUSIGN_RSA_PRIVATE_KEY);
+        let keyOk = false;
+        try { if (key) { crypto.createPrivateKey(key); keyOk = true; } } catch { /* chave inválida */ }
+
+        const info = {
+            integrationKey: integrationKey || null,
+            userId: userId || null,
+            accountIdConfigured: Boolean(accountId),
+            userIdLooksLikeAccountId: Boolean(userId && accountId && userId === accountId),
+            basePath: basePath || null,
+            environment: isDemo ? 'demo' : 'production',
+            privateKeyValid: keyOk,
+            consentUrl,
+            redirectUriToRegister: redirect,
+        };
+        try {
+            await this.authenticate();
+            return { ok: true, ...info };
+        } catch (err: any) {
+            let orig = err;
+            while (orig?.originalError) orig = orig.originalError;
+            const body = orig?.response?.body ?? orig?.response?.data;
+            return { ok: false, error: body?.error || orig?.message || err?.message, ...info };
+        }
+    }
+
+    /**
      * Initialize the API Client with JWT Authentication
      */
     private static async authenticate() {

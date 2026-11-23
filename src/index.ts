@@ -169,7 +169,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-23-fluxos-9',
+    version: '2026-11-23-docusign-10',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
@@ -204,6 +204,13 @@ app.get('/health/ai', async (req: Request, res: Response) => {
 app.get('/health/s3', async (req: Request, res: Response) => {
   const { s3Service } = await import('./services/s3.service');
   const result = await s3Service.checkBucket();
+  res.status(result.ok ? 200 : 503).json({ ...result, timestamp: new Date().toISOString() });
+});
+
+// Diagnóstico do DocuSign: login JWT, ambiente e link de autorização (nunca expõe a chave privada)
+app.get('/health/docusign', async (req: Request, res: Response) => {
+  const { DocuSignService } = await import('./services/docusign.service');
+  const result = await DocuSignService.check();
   res.status(result.ok ? 200 : 503).json({ ...result, timestamp: new Date().toISOString() });
 });
 
