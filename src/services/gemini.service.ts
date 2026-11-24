@@ -208,7 +208,24 @@ export const generateLegalResponse = async (prompt: string, context?: any, mode:
     const response = result.response;
     // Peças passam pela revisão de idioma e de Observações (a rota comum tem 55 s)
     return mode === 'peca' ? await revisarPeca(response.text(), deadline ?? startedAt + 50000) : response.text();
-  } catch (error) {
+  } catch (error: any) {
+    // Gemini fora do ar (ex.: 503 de alta demanda): responde pela Maritaca, como o chat do painel
+    if (isMaritacaConfigured()) {
+      try {
+        let fullPrompt = prompt;
+        if (context) fullPrompt = `Context: ${typeof context === 'string' ? context : JSON.stringify(context)}\n\n${prompt}`;
+        fullPrompt += `\n\n${mode === 'peca' ? PECA_INSTRUCTION() : PT_BR_INSTRUCTION()}`;
+        console.error(`[gemini] generateLegalResponse falhou, usando a Maritaca (${MARITACA_MODEL}):`, error?.message || error);
+        const text = await maritacaCompletion([{ role: 'user', content: fullPrompt }], {
+          temperature: mode === 'peca' ? 0.3 : 0.7,
+          maxTokens: 4096,
+          timeoutMs: 45000,
+        });
+        if (text && text.trim()) return text;
+      } catch (maritacaError: any) {
+        console.error('[maritaca] Reserva também falhou:', maritacaError?.message || maritacaError);
+      }
+    }
     throw new Error('Falha ao gerar a resposta do modelo de IA');
   }
 };
