@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { AppError } from './utils/errors';
 import { isPanelOrigin } from './services/tenant.service';
 import widgetRoutes from './routes/widget.routes';
+import demoRoutes from './routes/demo.routes';
 import { brandMiddleware } from './middleware/brand.middleware';
 
 // Load environment variables
@@ -169,7 +170,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     // Versão do código no ar: serve para conferir se a última atualização foi publicada
-    version: '2026-11-24-ia-reserva-11',
+    version: '2026-11-24-demo-aberta-12',
     database: {
       status: dbStates[dbStatus] || 'unknown',
       connected: dbStatus === 1,
@@ -233,6 +234,7 @@ import { tenantPublicRouter, officeRouter } from './routes/tenant.routes';
 const routes: Array<[string, express.Router]> = [
   ['/auth', authRoutes],
   ['/ai', aiRoutes],
+  ['/demo', demoRoutes],
   ['/chats', chatRoutes],
   ['/documents', documentRoutes],
   ['/notifications', notificationRoutes],

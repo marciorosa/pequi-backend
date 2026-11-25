@@ -16,6 +16,18 @@ export const hit = (key: string, max: number, windowMs: number): { ok: boolean; 
   return { ok: b.count <= max, retryAfter: Math.ceil((b.resetAt - now) / 1000) };
 };
 
+/** Quantos pedidos a chave já fez na janela atual (sem somar) */
+export const peek = (key: string): number => {
+  const b = buckets.get(key);
+  return b && b.resetAt > Date.now() ? b.count : 0;
+};
+
+/** Devolve 1 pedido à chave (ex.: quando a IA falhou e o visitante não recebeu resposta) */
+export const refund = (key: string): void => {
+  const b = buckets.get(key);
+  if (b && b.count > 0) b.count -= 1;
+};
+
 // Limpeza periódica para o Map não crescer sem fim
 setInterval(() => {
   const now = Date.now();
